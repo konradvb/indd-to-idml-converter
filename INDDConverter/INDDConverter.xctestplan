@@ -1,0 +1,35 @@
+{
+  "configurations" : [
+    {
+      "id" : "CA3AAE1D-B5A1-4A59-8FA5-F07765DC5EB6",
+      "name" : "Test Scheme Action",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+    "targetForVariableExpansion" : {
+      "containerPath" : "container:INDDConverter.xcodeproj",
+      "identifier" : "8BC2655B2DEDD3F400F279A4",
+      "name" : "INDDConverter"
+    }
+  },
+  "testTargets" : [
+    {
+      "target" : {
+        "containerPath" : "container:INDDConverter.xcodeproj",
+        "identifier" : "8BC265732DEDD3F500F279A4",
+        "name" : "INDDConverterUITests"
+      }
+    },
+    {
+      "target" : {
+        "containerPath" : "container:INDDConverterPackage",
+        "identifier" : "INDDConverterFeatureTests",
+        "name" : "INDDConverterFeatureTests"
+      }
+    }
+  ],
+  "version" : 1
+}
