@@ -2,8 +2,9 @@
 "app.title" = "INDD → IDML Converter";
 
 /* Drop Zone */
-"drop.hint" = "Drop a folder here";
-"drop.button" = "Choose Folder";
+"drop.hint" = "Drop files or a folder here";
+"drop.button.files" = "Choose Files";
+"drop.button.folder" = "Choose Folder";
 
 /* Status */
 "status.files.one" = "1 .indd file found";
