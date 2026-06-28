@@ -45,9 +45,28 @@ public class Converter: ObservableObject {
         scannedBytes = 0
         scanBytesPerSecond = 0
         scanStartTime = Date()
-        // Gesamtkapazität des Volumes ermitteln
-        let volCapacity = (try? folderURL.resourceValues(forKeys: [.volumeTotalCapacityKey]).volumeTotalCapacity).flatMap { Int64($0) } ?? 0
-        volumeTotalBytes = volCapacity
+
+        // Nur bei echtem Volume-Root (z.B. /, /Volumes/Backup) die Festplattenkapazität zeigen
+        let isVolumeRoot = (try? folderURL.resourceValues(forKeys: [.isVolumeKey]).isVolume) ?? false
+        if isVolumeRoot {
+            volumeTotalBytes = (try? folderURL.resourceValues(forKeys: [.volumeTotalCapacityKey]).volumeTotalCapacity).flatMap { Int64($0) } ?? 0
+        } else {
+            volumeTotalBytes = 0
+            // Ordnergröße im Hintergrund mit du schätzen
+            Task.detached(priority: .background) {
+                let process = Process()
+                process.executableURL = URL(fileURLWithPath: "/usr/bin/du")
+                process.arguments = ["-sk", folderURL.path]
+                let pipe = Pipe()
+                process.standardOutput = pipe
+                try? process.run()
+                process.waitUntilExit()
+                let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+                if let kb = Int64(output.split(separator: "\t").first?.trimmingCharacters(in: .whitespaces) ?? "") {
+                    await MainActor.run { self.volumeTotalBytes = kb * 1024 }
+                }
+            }
+        }
         defer { isSearching = false; currentSearchPath = "" }
 
         return await Task.detached(priority: .userInitiated) {
