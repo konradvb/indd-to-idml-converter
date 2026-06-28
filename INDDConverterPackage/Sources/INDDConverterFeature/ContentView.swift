@@ -588,17 +588,18 @@ public struct ContentView: View {
     private func startScan() {
         foundFiles = []; errorMessage = nil
         scanTask = Task {
-            var all: [URL] = []
-            for root in sourceRoots {
+            // Einzelne .indd-Dateien direkt übernehmen, Ordner/Volumes gesammelt scannen
+            let singleFiles = sourceRoots.filter { $0.pathExtension.lowercased() == "indd" }
+            let folders = sourceRoots.filter { url in
                 var isDir: ObjCBool = false
-                FileManager.default.fileExists(atPath: root.path, isDirectory: &isDir)
-                if isDir.boolValue {
-                    all.append(contentsOf: await converter.findInddFilesAsync(in: root))
-                } else if root.pathExtension.lowercased() == "indd" {
-                    all.append(root)
-                }
-                if Task.isCancelled { return }
+                FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir)
+                return isDir.boolValue
             }
+            var all: [URL] = singleFiles
+            if !folders.isEmpty {
+                all.append(contentsOf: await converter.findInddFilesAsync(in: folders))
+            }
+            if Task.isCancelled { return }
             foundFiles = all
             if all.isEmpty { errorMessage = "Keine .indd Dateien gefunden." }
         }
