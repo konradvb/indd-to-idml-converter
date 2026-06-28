@@ -97,11 +97,55 @@ with timeout of 300 seconds
 end timeout
 """
 
-        // osascript als Prozess aufrufen — zuverlässiger als NSAppleScript in Swift
+        // Dialog-Watcher: klickt automatisch Verknüpfungs-Dialoge in InDesign weg
+        let watcherScript = """
+repeat 120 times
+    delay 0.5
+    tell application "System Events"
+        if exists process "Adobe InDesign 2026" then
+            tell process "Adobe InDesign 2026"
+                repeat with w in windows
+                    try
+                        repeat with b in buttons of w
+                            set btnName to name of b
+                            if btnName contains "Don't Update" or btnName contains "Nicht aktuali" or btnName contains "Beibehalten" or btnName contains "OK" or btnName contains "Schließen" then
+                                click b
+                                exit repeat
+                            end if
+                        end repeat
+                    end try
+                    try
+                        repeat with s in sheets of w
+                            repeat with b in buttons of s
+                                set btnName to name of b
+                                if btnName contains "Don't Update" or btnName contains "Nicht aktuali" or btnName contains "Beibehalten" or btnName contains "OK" then
+                                    click b
+                                    exit repeat
+                                end if
+                            end repeat
+                        end try
+                    end try
+                end repeat
+            end tell
+        end if
+    end tell
+end repeat
+"""
+        let watcherFile = desktop.appendingPathComponent("_indd_watcher.applescript")
+        try? watcherScript.write(to: watcherFile, atomically: true, encoding: .utf8)
+
+        let watcher = Process()
+        watcher.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        watcher.arguments = [watcherFile.path]
+        try? watcher.run()
+
+        // Hauptkonvertierung
         let scriptFile = desktop.appendingPathComponent("_indd_convert_script.applescript")
         do {
             try script.write(to: scriptFile, atomically: true, encoding: .utf8)
         } catch {
+            watcher.terminate()
+            try? FileManager.default.removeItem(at: watcherFile)
             try? FileManager.default.removeItem(at: tempIndd)
             return ConversionResult(path: url.path, success: false, error: "Script schreiben fehlgeschlagen: \(error.localizedDescription)")
         }
@@ -116,12 +160,16 @@ end timeout
             try process.run()
             process.waitUntilExit()
         } catch {
+            watcher.terminate()
             try? FileManager.default.removeItem(at: tempIndd)
             try? FileManager.default.removeItem(at: scriptFile)
+            try? FileManager.default.removeItem(at: watcherFile)
             return ConversionResult(path: url.path, success: false, error: "osascript starten fehlgeschlagen: \(error.localizedDescription)")
         }
 
+        watcher.terminate()
         try? FileManager.default.removeItem(at: scriptFile)
+        try? FileManager.default.removeItem(at: watcherFile)
         try? FileManager.default.removeItem(at: tempIndd)
 
         if process.terminationStatus != 0 {
