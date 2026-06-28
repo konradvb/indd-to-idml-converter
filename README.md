@@ -77,6 +77,13 @@ open INDDConverter.xcworkspace
 xcodebuild -workspace INDDConverter.xcworkspace -scheme INDDConverter -configuration Release build
 ```
 
+## Support this project
+
+This tool is free and open source. If it saved you time or money on an Adobe subscription, consider buying me a coffee:
+
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-Support-ff5e5b?logo=ko-fi&logoColor=white)](https://ko-fi.com/konradvb)
+[![GitHub Sponsors](https://img.shields.io/badge/GitHub-Sponsor-ea4aaa?logo=github&logoColor=white)](https://github.com/sponsors/konradvb)
+
 ## License
 
 MIT
