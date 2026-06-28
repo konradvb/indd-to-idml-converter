@@ -64,6 +64,16 @@ public struct ContentView: View {
     @State private var scanTask: Task<Void, Never>?
     private let inDesignInstalled = Converter.inDesignInstalled()
 
+    // Vom Nutzer ziehbare Höhen der beiden Felder (Quellen-Box oben, Listen-Bereich unten)
+    @State private var sourceBoxHeight: CGFloat = 130
+    @State private var listHeight: CGFloat = 200
+    @State private var dragStartSource: CGFloat?
+    @State private var dragStartList: CGFloat?
+
+    // Grenzen für die ziehbaren Felder
+    private let minSourceH: CGFloat = 60, maxSourceH: CGFloat = 420
+    private let minListH: CGFloat = 90, maxListH: CGFloat = 520
+
     public init() {}
 
     // Reine Anzeige — KEINE State-Mutation hier (würde sonst Render-Schleife/Beachball auslösen)
@@ -82,6 +92,48 @@ public struct ContentView: View {
     // Zustand der Drop-Zone
     private var dropZoneIsEmpty: Bool {
         sourceRoots.isEmpty && !converter.isSearching
+    }
+
+    // Ist unter der Quellen-Box ein Listen-Bereich sichtbar (Suche/Treffer/Ergebnisse)?
+    private var hasContentBelow: Bool {
+        converter.isSearching
+            || (!foundFiles.isEmpty && !converter.isRunning && converter.results.isEmpty)
+            || (!converter.results.isEmpty && !converter.isRunning)
+    }
+
+    // Ziehbarer Trenner: verschiebt Höhe zwischen Quellen-Box und Listen-Bereich
+    private var resizeDivider: some View {
+        VStack(spacing: 3) {
+            RoundedRectangle(cornerRadius: 2)
+                .fill(Color.secondary.opacity(0.35))
+                .frame(width: 44, height: 5)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 16)
+        .contentShape(Rectangle())
+        .onHover { inside in
+            if inside { NSCursor.resizeUpDown.push() } else { NSCursor.pop() }
+        }
+        .gesture(
+            DragGesture(minimumDistance: 1)
+                .onChanged { value in
+                    if dragStartSource == nil {
+                        dragStartSource = sourceBoxHeight
+                        dragStartList = listHeight
+                    }
+                    guard let s0 = dragStartSource, let l0 = dragStartList else { return }
+                    // Delta so begrenzen, dass beide Felder in ihren Grenzen bleiben
+                    let lower = max(minSourceH - s0, l0 - maxListH)
+                    let upper = min(maxSourceH - s0, l0 - minListH)
+                    let d = min(max(value.translation.height, lower), upper)
+                    sourceBoxHeight = s0 + d
+                    listHeight = l0 - d
+                }
+                .onEnded { _ in
+                    dragStartSource = nil
+                    dragStartList = nil
+                }
+        )
     }
 
     public var body: some View {
@@ -115,6 +167,11 @@ public struct ContentView: View {
                         handleDrop(providers)
                     }
                     .disabled(converter.isRunning)
+
+                // Ziehbarer Trenner zwischen Quellen-Box und Listen-Bereich
+                if !dropZoneIsEmpty && hasContentBelow {
+                    resizeDivider
+                }
 
                 // Fehlermeldung
                 if let error = errorMessage {
@@ -307,8 +364,11 @@ public struct ContentView: View {
                         }
                         .padding(.vertical, 4)
                     }
-                    // Adaptive Höhe: wächst bis ~3 Quellen, danach wird gescrollt
-                    .frame(height: min(CGFloat(sourceRoots.count) * 42 + 8, 138))
+                    // Höhe: vom Nutzer ziehbar wenn ein Listen-Bereich darunter ist,
+                    // sonst adaptiv (wächst bis ~3 Quellen, danach Scroll)
+                    .frame(height: hasContentBelow
+                           ? sourceBoxHeight
+                           : min(CGFloat(sourceRoots.count) * 42 + 8, 138))
 
                     // Drag-Hinweis unten
                     if isDragging {
@@ -400,7 +460,7 @@ public struct ContentView: View {
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    .frame(maxHeight: 170)
+                    .frame(height: listHeight)
                 }
             }
         }
@@ -451,7 +511,7 @@ public struct ContentView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(maxHeight: 240)
+            .frame(height: listHeight)
         }
         .padding(.horizontal, 12).padding(.vertical, 10)
         .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
@@ -484,7 +544,7 @@ public struct ContentView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(maxHeight: 140)
+            .frame(height: listHeight)
 
             if !sourceRoots.isEmpty {
                 Button {
