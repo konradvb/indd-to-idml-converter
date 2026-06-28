@@ -21,6 +21,8 @@ MACOSX_DEPLOYMENT_TARGET = 13.0
 // Info PLIST
 // ==========================================
 GENERATE_INFOPLIST_FILE = YES
+// Begründung für den Automations-Dialog (InDesign-Steuerung). Pflicht für Hardened Runtime.
+INFOPLIST_KEY_NSAppleEventsUsageDescription = Steuert Adobe InDesign im Hintergrund, um deine .indd-Dateien als .idml zu exportieren.
 
 // ==========================================
 // Entitlements

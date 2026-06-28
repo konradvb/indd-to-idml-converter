@@ -4,5 +4,9 @@
 <dict>
 	<key>com.apple.security.app-sandbox</key>
 	<false/>
+	<!-- Erlaubt der notarisierten App (mit Hardened Runtime), Apple Events an InDesign zu senden.
+	     Ohne dieses Entitlement würde die InDesign-Steuerung nach der Notarisierung blockiert. -->
+	<key>com.apple.security.automation.apple-events</key>
+	<true/>
 </dict>
 </plist>

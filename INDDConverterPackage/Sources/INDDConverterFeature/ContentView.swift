@@ -64,20 +64,20 @@ public struct ContentView: View {
     @State private var scanTask: Task<Void, Never>?
     private let inDesignInstalled = Converter.inDesignInstalled()
 
-    // Vom Nutzer ziehbare Höhen der beiden Felder (Quellen-Box oben, Listen-Bereich unten)
+    // User-draggable heights for the two panes (source box on top, list area below).
     @State private var sourceBoxHeight: CGFloat = 130
     @State private var listHeight: CGFloat = 200
     @State private var dragStartSource: CGFloat?
     @State private var dragStartList: CGFloat?
     @State private var dividerHover = false
 
-    // Grenzen für die ziehbaren Felder
+    // Bounds for the draggable panes.
     private let minSourceH: CGFloat = 60, maxSourceH: CGFloat = 420
     private let minListH: CGFloat = 90, maxListH: CGFloat = 520
 
     public init() {}
 
-    // Reine Anzeige — KEINE State-Mutation hier (würde sonst Render-Schleife/Beachball auslösen)
+    // Display only — NO state mutation here (it would trigger a render loop / beachball).
     var etaString: String? {
         let remaining = converter.etaSeconds
         guard remaining >= 10 else { return nil }
@@ -90,20 +90,20 @@ public struct ContentView: View {
     var skippedCount: Int { converter.results.filter { $0.success && $0.error != nil }.count }
     var errorCount: Int { converter.results.filter { !$0.success }.count }
 
-    // Zustand der Drop-Zone
+    // Drop-zone state.
     private var dropZoneIsEmpty: Bool {
         sourceRoots.isEmpty && !converter.isSearching
     }
 
-    // Ist unter der Quellen-Box ein Listen-Bereich sichtbar (Suche/Treffer/Ergebnisse)?
+    // Is a list area shown below the source box (search / matches / results)?
     private var hasContentBelow: Bool {
         converter.isSearching
             || (!foundFiles.isEmpty && !converter.isRunning && converter.results.isEmpty)
             || (!converter.results.isEmpty && !converter.isRunning)
     }
 
-    // Ziehbarer Trenner: verschiebt Höhe zwischen Quellen-Box und Listen-Bereich.
-    // Klarer Griff (3 Punkte) mit Hover-Hervorhebung — eindeutig als „zum Ziehen" erkennbar.
+    // Draggable divider: shifts height between the source box and the list area.
+    // Clear grip (3 dots) with hover highlight — obviously meant to be dragged.
     private var resizeDivider: some View {
         HStack(spacing: 4) {
             ForEach(0..<3, id: \.self) { _ in
@@ -131,7 +131,7 @@ public struct ContentView: View {
                         dragStartList = listHeight
                     }
                     guard let s0 = dragStartSource, let l0 = dragStartList else { return }
-                    // Delta so begrenzen, dass beide Felder in ihren Grenzen bleiben
+                    // Clamp the delta so both panes stay within their bounds.
                     let lower = max(minSourceH - s0, l0 - maxListH)
                     let upper = min(maxSourceH - s0, l0 - minListH)
                     let d = min(max(value.translation.height, lower), upper)
@@ -170,20 +170,20 @@ public struct ContentView: View {
                 }
                 .padding(.top, 4)
 
-                // Drop-Zone — leer oder mit Inhalt
-                // .fileURL + .folder + .directory deckt normale Dateien UND Finder-Seitenleiste ab
+                // Drop zone — empty or filled.
+                // .fileURL + .folder + .directory covers normal files AND Finder sidebar items.
                 dropZone
                     .onDrop(of: [.fileURL, .folder, .directory], isTargeted: $isDragging) { providers, _ in
                         handleDrop(providers)
                     }
                     .disabled(converter.isRunning)
 
-                // Ziehbarer Trenner zwischen Quellen-Box und Listen-Bereich
+                // Draggable divider between the source box and the list area.
                 if !dropZoneIsEmpty && hasContentBelow {
                     resizeDivider
                 }
 
-                // Fehlermeldung
+                // Error message
                 if let error = errorMessage {
                     HStack(spacing: 6) {
                         Image(systemName: "xmark.circle.fill").foregroundStyle(.red)
@@ -191,15 +191,15 @@ public struct ContentView: View {
                     }
                 }
 
-                // Suchfortschritt
+                // Search progress
                 if converter.isSearching { searchProgressView }
 
-                // Gefundene Dateien (nach Scan, vor Konvertierung)
+                // Found files (after scan, before conversion).
                 if !foundFiles.isEmpty && !converter.isRunning && converter.results.isEmpty {
                     foundFilesView
                 }
 
-                // Konvertierungs-Fortschritt
+                // Conversion progress
                 if converter.isRunning {
                     VStack(spacing: 8) {
                         ProgressView(value: converter.progress)
@@ -211,10 +211,10 @@ public struct ContentView: View {
                     }
                 }
 
-                // Ergebnisse
+                // Results
                 if !converter.results.isEmpty && !converter.isRunning { resultsView }
 
-                // Aktionsbuttons
+                // Action buttons
                 actionButtons
             }
             .padding(20)
@@ -228,7 +228,7 @@ public struct ContentView: View {
     @ViewBuilder
     private var dropZone: some View {
         if dropZoneIsEmpty {
-            // Leer: klassische Drop-Zone
+            // Empty: classic drop zone.
             ZStack {
                 RoundedRectangle(cornerRadius: 14)
                     .fill(isDragging ? Color.blue.opacity(0.08) : Color(nsColor: .controlBackgroundColor))
@@ -270,7 +270,7 @@ public struct ContentView: View {
             .frame(minHeight: 130)
 
         } else {
-            // Gefüllt: zeigt Roots als Kacheln
+            // Filled: shows the roots as cards.
             ZStack(alignment: .topTrailing) {
                 RoundedRectangle(cornerRadius: 14)
                     .fill(isDragging ? Color.blue.opacity(0.08) : Color(nsColor: .controlBackgroundColor))
@@ -284,13 +284,13 @@ public struct ContentView: View {
                     .animation(.easeInOut(duration: 0.15), value: isDragging)
 
                 VStack(alignment: .leading, spacing: 0) {
-                    // Titelzeile
+                    // Title row
                     HStack(spacing: 8) {
                         Text(sourceRoots.count == 1 ? "1 Quelle ausgewählt" : "\(sourceRoots.count) Quellen ausgewählt")
                             .font(.callout.bold())
                             .foregroundStyle(.primary)
                         Spacer()
-                        // Weiteres hinzufügen / zurücksetzen — größere, klar tappbare Buttons
+                        // Add more / reset — larger, clearly tappable buttons.
                         if !converter.isSearching {
                             HStack(spacing: 4) {
                                 Button { pickFiles() } label: {
@@ -326,7 +326,7 @@ public struct ContentView: View {
 
                     Divider().padding(.horizontal, 8)
 
-                    // Root-Kacheln
+                    // Root cards
                     ScrollView {
                         VStack(alignment: .leading, spacing: 3) {
                             ForEach(sourceRoots, id: \.path) { root in
@@ -374,13 +374,13 @@ public struct ContentView: View {
                         }
                         .padding(.vertical, 4)
                     }
-                    // Höhe: vom Nutzer ziehbar wenn ein Listen-Bereich darunter ist,
-                    // sonst adaptiv (wächst bis ~3 Quellen, danach Scroll)
+                    // Height: user-draggable when a list area is shown below,
+                    // otherwise adaptive (grows up to ~3 sources, then scrolls).
                     .frame(height: hasContentBelow
                            ? sourceBoxHeight
                            : min(CGFloat(sourceRoots.count) * 42 + 8, 138))
 
-                    // Drag-Hinweis unten
+                    // Drag hint at the bottom.
                     if isDragging {
                         Divider().padding(.horizontal, 8)
                         HStack(spacing: 6) {
@@ -396,13 +396,13 @@ public struct ContentView: View {
         }
     }
 
-    // MARK: - Suchfortschritt
+    // MARK: - Search progress
 
     @ViewBuilder
     private var searchProgressView: some View {
         VStack(alignment: .leading, spacing: 10) {
 
-            // Status-Zeile
+            // Status row
             HStack(spacing: 8) {
                 ProgressView().controlSize(.small)
                 VStack(alignment: .leading, spacing: 1) {
@@ -418,7 +418,7 @@ public struct ContentView: View {
                     .buttonStyle(.bordered).controlSize(.small)
             }
 
-            // Fortschrittsbalken (nur wenn Gesamtgröße bekannt)
+            // Progress bar (only when the total size is known).
             if converter.volumeTotalBytes > 0 {
                 let progress = min(1.0, Double(converter.scannedBytes) / Double(converter.volumeTotalBytes))
                 VStack(alignment: .leading, spacing: 3) {
@@ -438,7 +438,7 @@ public struct ContentView: View {
                 }
             }
 
-            // Bereits gefundene Dateien live anzeigen
+            // Show files found so far, live.
             if converter.searchCount > 0 {
                 Divider()
                 HStack {
@@ -446,8 +446,8 @@ public struct ContentView: View {
                     Text("\(converter.searchCount) .indd \(converter.searchCount == 1 ? "Datei" : "Dateien") gefunden")
                         .font(.caption.bold()).foregroundStyle(.blue)
                 }
-                // Live-Liste ALLER gefundenen Dateien — scrollbar schon während der Suche.
-                // LazyVStack rendert nur sichtbare Zeilen, daher auch bei tausenden flüssig.
+                // Live list of ALL found files — scrollable even during the search.
+                // LazyVStack only renders visible rows, so it stays smooth even with thousands.
                 if !converter.liveFoundFiles.isEmpty {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 2) {
@@ -478,7 +478,7 @@ public struct ContentView: View {
         .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
     }
 
-    // MARK: - Gefundene Dateien
+    // MARK: - Found files
 
     @ViewBuilder
     private var foundFilesView: some View {
@@ -527,7 +527,7 @@ public struct ContentView: View {
         .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
     }
 
-    // MARK: - Ergebnisse
+    // MARK: - Results
 
     @ViewBuilder
     private var resultsView: some View {
@@ -570,7 +570,7 @@ public struct ContentView: View {
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
     }
 
-    // MARK: - Aktionsbuttons
+    // MARK: - Action buttons
 
     @ViewBuilder
     private var actionButtons: some View {
@@ -579,7 +579,7 @@ public struct ContentView: View {
                 Button("Scan starten") { startScan() }
                     .buttonStyle(.borderedProminent).controlSize(.large)
             }
-            // Abbrechen-Button ist bereits in searchProgressView — hier nicht nochmal
+            // The Cancel button already lives in searchProgressView — not repeated here.
             if !foundFiles.isEmpty && !converter.isRunning && !converter.isSearching && converter.results.isEmpty {
                 HStack(spacing: 10) {
                     Button(String(localized: "button.start", bundle: .module)) {
@@ -621,7 +621,7 @@ public struct ContentView: View {
         Task {
             var dirs: [URL] = []; var files: [URL] = []
             for provider in providers {
-                // Mehrere UTI-Typen probieren — Finder-Seitenleiste liefert oft public.folder
+                // Try several UTI types — Finder sidebar items often come as public.folder.
                 let typeIds = ["public.file-url", "public.folder", "public.directory",
                                "com.apple.finder.node"]
                 var resolved: URL?
@@ -654,9 +654,9 @@ public struct ContentView: View {
 
     private func addAllVolumes() {
         let fm = FileManager.default
-        // Alle gemounteten Volumes
+        // All mounted volumes.
         let mountedVolumes = (fm.mountedVolumeURLs(includingResourceValuesForKeys: [.isVolumeKey, .volumeIsEjectableKey], options: [.skipHiddenVolumes]) ?? [])
-        // Root-Laufwerk explizit hinzufügen (wird von mountedVolumeURLs oft nicht gelistet)
+        // Add the root volume explicitly (mountedVolumeURLs often omits it).
         var roots = mountedVolumes
         let mainDisk = URL(fileURLWithPath: "/")
         if !roots.contains(mainDisk) { roots.insert(mainDisk, at: 0) }
@@ -680,7 +680,7 @@ public struct ContentView: View {
     }
 
     private func addRoots(_ urls: [URL], asFiles: Bool) {
-        // Deduplizieren
+        // Deduplicate.
         let existing = Set(sourceRoots.map(\.path))
         let fresh = urls.filter { !existing.contains($0.path) }
         sourceRoots.append(contentsOf: fresh)
@@ -688,7 +688,7 @@ public struct ContentView: View {
         converter.results = []
         converter.progress = 0
         errorMessage = nil
-        // Einzelne .indd Dateien direkt laden
+        // Load individual .indd files directly.
         if asFiles {
             foundFiles = sourceRoots.filter { $0.pathExtension.lowercased() == "indd" }
         }
@@ -697,7 +697,7 @@ public struct ContentView: View {
     private func startScan() {
         foundFiles = []; errorMessage = nil
         scanTask = Task {
-            // Einzelne .indd-Dateien direkt übernehmen, Ordner/Volumes gesammelt scannen
+            // Take individual .indd files directly; scan folders/volumes together.
             let singleFiles = sourceRoots.filter { $0.pathExtension.lowercased() == "indd" }
             let folders = sourceRoots.filter { url in
                 var isDir: ObjCBool = false
@@ -715,7 +715,7 @@ public struct ContentView: View {
     }
 
     private func cancelScan() {
-        converter.cancelScan()      // stoppt den laufenden Hintergrund-Scan
+        converter.cancelScan()      // stops the running background scan
         scanTask?.cancel(); scanTask = nil
         converter.isSearching = false
     }

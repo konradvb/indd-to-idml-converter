@@ -1,72 +1,101 @@
 # INDD → IDML Converter
 
-Converts Adobe InDesign files (`.indd`) to the open IDML format (`.idml`) — so you can open your designs in **Affinity Publisher**, QuarkXPress, or other applications without depending on Adobe.
+**English** · [Deutsch](README.de.md)
 
-Available in English and German, automatically matching your system language.
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-Support-ff5e5b?logo=ko-fi&logoColor=white)](https://ko-fi.com/konradvb)
+[![GitHub Sponsors](https://img.shields.io/badge/GitHub-Sponsor-ea4aaa?logo=github&logoColor=white)](https://github.com/sponsors/konradvb)
 
-## Download
+Convert Adobe InDesign files (`.indd`) to the open **IDML** format — in bulk, automatically. Open your layouts in **Affinity Publisher**, QuarkXPress and other apps, without staying locked into an Adobe subscription forever.
 
-**[INDD-IDML-Converter-v1.2.zip](https://github.com/konradvb/indd-to-idml-converter/releases/tag/v1.2)** — macOS App, ~144 KB
+> **Perfect for the moment before you cancel Adobe.** Point it at a folder (or your whole drive), and it saves every InDesign document as an open `.idml` right next to the original. Your archive stays openable — for good.
 
-## What it does
+---
 
-- Drop a folder onto the app or use the folder picker
-- All `.indd` files inside are found automatically (including subfolders)
-- Click "Start Conversion" — each file is exported as `.idml` next to the original
-- Progress bar shows current file; results show how many succeeded or failed
-- Original `.indd` files are never touched
+## Why convert your files at all?
+
+`.indd` is a **closed, proprietary format**: only Adobe InDesign can open it. The moment you stop paying for Creative Cloud, your own old layouts become unreadable — locked inside a file only Adobe can unlock.
+
+`.idml` is the **open** counterpart. It carries the same layout (pages, text, styles, frames) in a documented, vendor-neutral format that other apps can read:
+
+- **Affinity Publisher** (a one-time purchase, no subscription) imports IDML directly — the most common reason people switch.
+- It's your **insurance against lock-in:** once your files are IDML, you can still open them in ten years, no matter what happens to your Adobe plan.
+- **You own your work again** — an open format means the files belong to you, not to a subscription.
+
+The catch: doing this by hand means opening every single document in InDesign and clicking *Export* — fine for one file, painful for hundreds. **This app does the whole batch automatically.**
+
+---
 
 ## Requirements
 
-- macOS 13 or later
-- **Adobe InDesign must be installed** — the app drives InDesign in the background. InDesign opens each file, exports it as IDML, and closes it again.
+- **macOS 13** (Ventura) or newer
+- **Adobe InDesign installed.** The app controls InDesign in the background to do the real export — so this is a **migration / archive helper, not an Adobe replacement.** You need InDesign on the machine while you convert; afterwards you can cancel and keep the IDML files.
 
-## Installation
+---
 
-1. Download and unzip the file
-2. Move `INDDConverter.app` to your Applications folder (optional)
-3. **First launch only:** Right-click the app → "Open" → confirm in the dialog
+## Download & Install
 
-The right-click step is a one-time requirement because the app is not notarized. After that, it launches normally with a double-click.
+1. Download the **[latest version here](https://github.com/konradvb/indd-to-idml-converter/releases/latest)** — a `.dmg` disk image.
+2. Open the `.dmg` and **drag `INDDConverter` onto the Applications shortcut** in the window.
+3. **First launch only:** right-click (or Control-click) the app in Applications → **Open** → confirm in the dialog.
 
-## Known Limitations
+> The right-click step is a one-time thing on the very first launch. After that, a normal double-click works. *(This step disappears once the app is notarized — see [For developers](#for-developers).)*
 
-**Missing fonts:** InDesign still exports even if fonts are missing, replacing them with substitutes. Affinity Publisher will show yellow warnings — fonts can be reassigned there.
+---
 
-**Linked images:** IDML contains only the layout, not the images themselves. If linked image files are no longer at their original path, image frames will appear empty in Affinity and need to be re-linked.
+## How to use — step by step
 
-**Cloud-sandboxed files:** Files inside locked app containers (e.g. Scanbot's iCloud container) cannot be copied directly. Move them to a regular folder first.
+1. **Open the app.**
+2. **Add what you want to convert.** Three ways, mix as you like:
+   - **Drag & drop** files or folders straight onto the window
+   - the **Choose Files** / **Choose Folder** buttons
+   - **Search all drives** — finds every `.indd` on everything currently connected (great for a full archive sweep)
+3. Click **Start scan.** The app searches and lists every `.indd` it finds. You can watch the list grow live and **cancel** at any time.
+4. Click **Start Conversion.** InDesign opens quietly in the background and exports each file as `.idml` — placed right next to the original.
+5. **Done.** You see how many files succeeded, were skipped, or failed. Click any entry to reveal it in Finder.
 
-## Command-Line Alternative
+**Two things that keep you safe:**
+- Your original `.indd` files are **never modified.**
+- Files that already have an `.idml` next to them are **skipped**, so you can re-run a scan anytime without doing double work.
 
-The included shell script and AppleScript can be used without the app:
+---
 
-```bash
-# 1. Find all .indd files in a folder
-./find_indd_files.sh ~/Documents /tmp/indd_files.txt
+## Good to know (limitations)
 
-# 2. Run the conversion (InDesign must be installed)
-osascript convert_indd_to_idml.applescript
+| Topic | What happens |
+|-------|--------------|
+| **Missing fonts** | InDesign substitutes them during export. Affinity Publisher flags them in yellow so you can reassign the right fonts there. |
+| **Linked images** | IDML stores the *layout*, not the image files. If a linked image has moved from its original path, the frame appears empty in Affinity and needs to be re-linked. |
+| **Cloud / locked folders** | Files inside locked app containers (e.g. some iCloud app containers) can't be read directly. Move them into a normal folder first, then convert. |
+| **Dialogs** | Missing-link and missing-font prompts are suppressed automatically — the batch runs without you having to click anything. |
+
+---
+
+## Support this project
+
+This tool is **free and open source**. If it saved you hours of work or a month of Adobe subscription, consider chipping in:
+
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-Buy_me_a_coffee-ff5e5b?logo=ko-fi&logoColor=white)](https://ko-fi.com/konradvb)
+[![GitHub Sponsors](https://img.shields.io/badge/GitHub-Sponsor-ea4aaa?logo=github&logoColor=white)](https://github.com/sponsors/konradvb)
+
+---
+
+## For developers
+
+Native macOS **SwiftUI** app, Workspace + Swift Package Manager.
+
 ```
-
-Adjust `fileListPath` and `logPath` at the top of the AppleScript to match your setup.
-
-## For Developers
-
-Native macOS SwiftUI app using a Workspace + Swift Package Manager structure:
-
-```
-INDDConverter.xcworkspace                         ← Open in Xcode
-INDDConverter/                                    ← App shell (entry point, assets)
+INDDConverter.xcworkspace          ← open this in Xcode
+INDDConverter/                     ← app shell (entry point, assets, AppIconGlass.icon)
 INDDConverterPackage/
   Sources/INDDConverterFeature/
-    ContentView.swift                             ← UI
-    Converter.swift                               ← AppleScript logic
-    Resources/
-      de.lproj/Localizable.strings               ← German strings
-      en.lproj/Localizable.strings               ← English strings
-convert_indd_to_idml.applescript                  ← Standalone script
-find_indd_files.sh                                ← Helper to build file list
+    ContentView.swift              ← UI
+    Converter.swift                ← scan + InDesign automation (AppleScript via osascript)
+    Resources/{de,en}.lproj/       ← localized strings
+Config/                            ← xcconfig build settings + entitlements
+notarize.sh                        ← build + sign + notarize for distribution
+convert_indd_to_idml.applescript   ← standalone script (no app needed)
+find_indd_files.sh                 ← helper to build a file list
 ```
 
 ### Build
@@ -77,13 +106,33 @@ open INDDConverter.xcworkspace
 xcodebuild -workspace INDDConverter.xcworkspace -scheme INDDConverter -configuration Release build
 ```
 
-## Support this project
+### Notarized release (so it opens without the right-click step)
 
-This tool is free and open source. If it saved you time or money on an Adobe subscription, consider buying me a coffee:
+One-time setup (needs a paid Apple Developer membership):
 
-[![Ko-fi](https://img.shields.io/badge/Ko--fi-Support-ff5e5b?logo=ko-fi&logoColor=white)](https://ko-fi.com/konradvb)
-[![GitHub Sponsors](https://img.shields.io/badge/GitHub-Sponsor-ea4aaa?logo=github&logoColor=white)](https://github.com/sponsors/konradvb)
+1. Create a **Developer ID Application** certificate — Xcode → Settings → Accounts → Manage Certificates → **+**.
+2. Store notary credentials in your keychain:
+   ```bash
+   xcrun notarytool store-credentials INDD-Notary --apple-id YOUR@APPLE-ID --team-id YOURTEAMID
+   ```
+
+Then, for every release:
+
+```bash
+./notarize.sh        # builds, signs (Hardened Runtime), notarizes, staples → dist/INDDConverter-notarized.zip
+```
+
+The app is **not sandboxed** on purpose (it drives InDesign and scans the file system), so it ships via **Developer ID + notarization**, not the Mac App Store.
+
+### Command-line alternative (no app)
+
+```bash
+./find_indd_files.sh ~/Documents /tmp/indd_files.txt   # 1. collect .indd paths
+osascript convert_indd_to_idml.applescript             # 2. convert (adjust paths at the top of the script)
+```
+
+---
 
 ## License
 
-MIT
+[MIT](LICENSE)

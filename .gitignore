@@ -60,3 +60,8 @@ fastlane/report.xml
 fastlane/Preview.html
 fastlane/screenshots/**/*.png
 fastlane/test_output*.profraw
+dist/
+.notarize-build/
+build/
+*.profraw
+.DS_Store

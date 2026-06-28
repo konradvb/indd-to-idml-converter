@@ -7,7 +7,7 @@ public struct ConversionResult: Sendable {
     public let error: String?
 }
 
-// Thread-sicheres Abbruch-Flag, das vom Hintergrund-Scan gelesen werden kann
+// Thread-safe cancellation flag that the background scan can read.
 final class CancelFlag: @unchecked Sendable {
     private let lock = NSLock()
     private var cancelled = false
@@ -31,7 +31,7 @@ public class Converter: ObservableObject {
         return items.contains { $0.lastPathComponent.hasPrefix("Adobe InDesign") }
     }
 
-    // Synchron (für Drop-Handler von einzelnen Dateien)
+    // Synchronous (used by the drop handler for individual files).
     public func findInddFiles(in folderURL: URL) -> [URL] {
         guard let enumerator = FileManager.default.enumerator(
             at: folderURL,
@@ -41,20 +41,26 @@ public class Converter: ObservableObject {
         return enumerator.compactMap { $0 as? URL }.filter { $0.pathExtension.lowercased() == "indd" }
     }
 
-    // Verzeichnisse die macOS-Datenschutz-Dialoge auslösen oder irrelevant sind
+    // Folders that trigger macOS privacy prompts or never contain .indd files.
+    // We skip these by name *before* reading their contents, so no prompt appears.
     private nonisolated static let skippedDirectoryNames: Set<String> = [
-        "Music", "Photos Library.photoslibrary", "Pictures",
+        "Music", "Pictures", "Movies", "Photos Library.photoslibrary",
         "Library", ".Trash", "node_modules", ".git"
     ]
 
-    // System-Pfade die beim Scan von / übersprungen werden (keine .indd dort)
+    // Absolute system paths skipped when scanning from "/" (no .indd there).
     private nonisolated static let skippedRootPaths: Set<String> = [
         "/System", "/usr", "/bin", "/sbin", "/private",
         "/dev", "/cores", "/opt", "/etc", "/var", "/tmp",
-        "/Volumes"  // Volumes werden separat als eigene Roots behandelt
+        "/Volumes"  // volumes are handled separately as their own roots
     ]
 
-    // Einstiegspunkt: mehrere Roots auf einmal scannen, GB-Summe über alle
+    // A folder is skipped if its absolute path or its name is on the lists above.
+    private nonisolated static func shouldSkip(_ url: URL) -> Bool {
+        skippedRootPaths.contains(url.path) || skippedDirectoryNames.contains(url.lastPathComponent)
+    }
+
+    // Entry point: scan several roots at once, summing total bytes across all of them.
     public func findInddFilesAsync(in roots: [URL]) async -> [URL] {
         cancelFlag.reset()
         isSearching = true
@@ -66,14 +72,14 @@ public class Converter: ObservableObject {
         liveFoundFiles = []
         scanStartTime = Date()
 
-        // Gesamtkapazität aller Roots vorab summieren
+        // Sum the total capacity of all roots up front.
         for root in roots {
             let isVol = (try? root.resourceValues(forKeys: [.isVolumeKey]).isVolume) ?? false
             if isVol {
                 let cap = (try? root.resourceValues(forKeys: [.volumeTotalCapacityKey]).volumeTotalCapacity).flatMap { Int64($0) } ?? 0
                 volumeTotalBytes += cap
             } else {
-                // du im Hintergrund — blockiert den Scan nicht
+                // Run `du` in the background — does not block the scan.
                 let rootPath = root.path
                 DispatchQueue.global(qos: .background).async {
                     let p = Process()
@@ -89,12 +95,12 @@ public class Converter: ObservableObject {
             }
         }
 
-        // Scan läuft auf GCD-Thread — kein Swift-Concurrency-Task, stabiler bei TCC-Dialogen
+        // Scan runs on a GCD thread (not a Swift concurrency task) — more stable across TCC prompts.
         let startTime = scanStartTime
         let result: [URL] = await withCheckedContinuation { cont in
             DispatchQueue.global(qos: .userInitiated).async {
-                // Akkumulatoren über ALLE Roots hinweg — sonst überschreibt
-                // Volume 2 die Treffer von Volume 1 in der Live-Anzeige
+                // Accumulators span ALL roots — otherwise volume 2 would overwrite
+                // volume 1's matches in the live display.
                 var all: [URL] = []
                 var totalBytes: Int64 = 0
                 for root in roots {
@@ -118,85 +124,82 @@ public class Converter: ObservableObject {
         return result
     }
 
-    // Scan auf GCD-Thread mit FileManager — robust dank autoreleasepool + errorHandler.
-    // allFound/totalBytes sind kumulativ über alle Roots, damit der Zähler nicht zurückspringt.
-    private nonisolated func _scanFolderGCD(_ folderURL: URL, startTime: Date,
+    // Iterative depth-first scan on a GCD thread.
+    //
+    // We deliberately do NOT use FileManager.enumerator: it prefetches a directory's
+    // contents before we get a chance to skip it, which makes macOS show a privacy
+    // prompt for Music / Pictures even though we never want to enter them. Here we
+    // check `shouldSkip` *before* ever reading a folder's contents, so protected
+    // folders are never touched and no prompt appears.
+    //
+    // allFound/totalBytes are cumulative across all roots so the live counter never
+    // jumps back when the next volume starts.
+    private nonisolated func _scanFolderGCD(_ rootURL: URL, startTime: Date,
                                             allFound: inout [URL], totalBytes: inout Int64) {
         let home = NSHomeDirectory()
+        let fm = FileManager.default
+        let keys: [URLResourceKey] = [.isDirectoryKey, .fileSizeKey]   // for contentsOfDirectory
+        let keySet: Set<URLResourceKey> = [.isDirectoryKey, .fileSizeKey]  // for resourceValues
 
-        guard let enumerator = FileManager.default.enumerator(
-            at: folderURL,
-            includingPropertiesForKeys: [.isDirectoryKey, .fileSizeKey],
-            options: [.skipsHiddenFiles],
-            errorHandler: { _, _ in true }  // Zugriffsfehler ignorieren, nicht crashen
-        ) else { return }
-
+        var stack: [URL] = [rootURL]          // explicit work stack (avoids deep recursion)
         var pendingBytes: Int64 = 0
         var pendingPath = ""
         var lastUIUpdate = Date()
-        var done = false
-
         var loopCounter = 0
-        while !done {
-            // Abbruch alle 256 Einträge prüfen (Lock nicht bei jedem File nehmen)
-            loopCounter += 1
-            if loopCounter & 0xFF == 0, isScanCancelled() { return }
 
-            // autoreleasepool schützt vor ObjC-Exceptions beim TCC-Dialog-Resume
-            autoreleasepool {
-                guard let url = enumerator.nextObject() as? URL else {
-                    done = true
-                    return
-                }
+        while let dir = stack.popLast() {
+            if isScanCancelled() { return }
+            if Converter.shouldSkip(dir) { continue }   // never read protected/irrelevant folders
 
-                var isDir: ObjCBool = false
-                FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir)
+            pendingPath = dir.path.replacingOccurrences(of: home, with: "~")
 
-                if isDir.boolValue {
-                    let p = url.path
-                    if Converter.skippedRootPaths.contains(p) ||
-                       Converter.skippedDirectoryNames.contains(url.lastPathComponent) {
-                        enumerator.skipDescendants()
-                    } else {
-                        pendingPath = p.replacingOccurrences(of: home, with: "~")
+            // Reading the directory's contents is what could trigger a TCC prompt —
+            // but only for Desktop/Documents/Downloads, which the user actually wants scanned.
+            guard let entries = try? fm.contentsOfDirectory(
+                at: dir, includingPropertiesForKeys: keys, options: [.skipsHiddenFiles]
+            ) else { continue }
+
+            for entry in entries {
+                loopCounter += 1
+                if loopCounter & 0xFF == 0, isScanCancelled() { return }
+                if Converter.shouldSkip(entry) { continue }   // skip before stat → no prompt
+
+                let vals = try? entry.resourceValues(forKeys: keySet)
+                if vals?.isDirectory == true {
+                    stack.append(entry)
+                } else {
+                    pendingBytes += Int64(vals?.fileSize ?? 0)
+                    if entry.pathExtension.lowercased() == "indd"
+                        && entry.lastPathComponent != "_indd_convert_work.indd" {  // ignore our own temp file
+                        allFound.append(entry)
                     }
-                    return
                 }
 
-                let fileSize = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize)
-                    .flatMap { Int64($0) } ?? 0
-                pendingBytes += fileSize
-
-                if url.pathExtension.lowercased() == "indd"
-                    && url.lastPathComponent != "_indd_convert_work.indd" {  // eigene Temp-Datei ignorieren
-                    allFound.append(url)
-                }
-            }
-
-            // UI nur alle 0.5s bündeln — weniger Re-Renders, ruhigeres Bild beim Fenster-/Trenner-Ziehen
-            let now = Date()
-            if now.timeIntervalSince(lastUIUpdate) >= 0.5 {
-                lastUIUpdate = now
-                totalBytes += pendingBytes
-                pendingBytes = 0
-                let bytes = totalBytes
-                let count = allFound.count
-                let path = pendingPath
-                let snapshot = Array(allFound)
-                let elapsed = Date().timeIntervalSince(startTime)
-                DispatchQueue.main.async {
-                    self.scannedBytes = bytes
-                    self.searchCount = count
-                    self.liveFoundFiles = snapshot
-                    if !path.isEmpty { self.currentSearchPath = path }
-                    if elapsed > 1 { self.scanBytesPerSecond = Double(bytes) / elapsed }
-                    // ETA nur sinkend: erst ab 0.5% Fortschritt, dann nie wieder hoch
-                    if self.volumeTotalBytes > 0 {
-                        let progress = Double(bytes) / Double(self.volumeTotalBytes)
-                        if progress > 0.005, elapsed > 2 {
-                            let remaining = (elapsed / progress) - elapsed
-                            if self.etaSeconds == 0 || remaining < self.etaSeconds {
-                                self.etaSeconds = remaining
+                // Push UI updates only every 0.5s — fewer re-renders, smoother window/divider dragging.
+                let now = Date()
+                if now.timeIntervalSince(lastUIUpdate) >= 0.5 {
+                    lastUIUpdate = now
+                    totalBytes += pendingBytes
+                    pendingBytes = 0
+                    let bytes = totalBytes
+                    let count = allFound.count
+                    let path = pendingPath
+                    let snapshot = Array(allFound)
+                    let elapsed = Date().timeIntervalSince(startTime)
+                    DispatchQueue.main.async {
+                        self.scannedBytes = bytes
+                        self.searchCount = count
+                        self.liveFoundFiles = snapshot
+                        if !path.isEmpty { self.currentSearchPath = path }
+                        if elapsed > 1 { self.scanBytesPerSecond = Double(bytes) / elapsed }
+                        // ETA only ever decreases: starts at 0.5% progress, never jumps up.
+                        if self.volumeTotalBytes > 0 {
+                            let progress = Double(bytes) / Double(self.volumeTotalBytes)
+                            if progress > 0.005, elapsed > 2 {
+                                let remaining = (elapsed / progress) - elapsed
+                                if self.etaSeconds == 0 || remaining < self.etaSeconds {
+                                    self.etaSeconds = remaining
+                                }
                             }
                         }
                     }
@@ -204,7 +207,7 @@ public class Converter: ObservableObject {
             }
         }
 
-        // Verbleibende Bytes dieses Ordners in den Gesamtwert übernehmen
+        // Carry this root's leftover bytes into the running total.
         totalBytes += pendingBytes
     }
 
@@ -218,7 +221,7 @@ public class Converter: ObservableObject {
     @Published public var liveFoundFiles: [URL] = []
     public var scanStartTime: Date = Date()
 
-    // Abbruch-Flag, thread-sicher und nonisolated nutzbar (eigene Sendable-Klasse)
+    // Cancellation flag, thread-safe and usable from nonisolated code (its own Sendable class).
     private let cancelFlag = CancelFlag()
     public func cancelScan() { cancelFlag.cancel() }
     private nonisolated func isScanCancelled() -> Bool { cancelFlag.isCancelled }
@@ -252,7 +255,7 @@ public class Converter: ObservableObject {
         let tempIdml = desktop.appendingPathComponent("_indd_convert_work.idml")
         let idmlURL = url.deletingPathExtension().appendingPathExtension("idml")
 
-        // Überspringen wenn IDML schon existiert
+        // Skip if the IDML already exists.
         if FileManager.default.fileExists(atPath: idmlURL.path) {
             return ConversionResult(path: url.path, success: true, error: "bereits konvertiert")
         }
@@ -269,8 +272,8 @@ public class Converter: ObservableObject {
         let script = """
 with timeout of 600 seconds
     tell application "Adobe InDesign 2026"
-        -- KORREKTE Property: liegt auf "script preferences", nicht auf der App selbst.
-        -- "never interact" unterdrückt fehlende-Verknüpfungen- und fehlende-Schriften-Dialoge beim Öffnen.
+        -- Correct property: it lives on "script preferences", not on the app itself.
+        -- "never interact" suppresses the missing-links and missing-fonts dialogs on open.
         set user interaction level of script preferences to never interact
         try
             set redraw of script preferences to false
@@ -296,9 +299,9 @@ with timeout of 600 seconds
 end timeout
 """
 
-        // Dialog-Watcher als Fallback: klickt verbleibende Dialoge automatisch weg.
-        // Prioritätsliste — die "weitermachen ohne Änderung"-Buttons zuerst,
-        // niemals "Abbrechen"/"Aktualisieren" (würde Öffnen abbrechen oder Relink starten).
+        // Dialog watcher as a fallback: auto-clicks any remaining dialogs.
+        // Priority list — the "continue without changes" buttons first,
+        // never "Cancel"/"Update" (which would abort the open or start a relink).
         let watcherScript = """
 set dismissNames to {"Don't Update", "Nicht aktualisieren", "Nicht aktuali", "Ignorieren", "Ignore", "Beibehalten", "Keep", "Übernehmen", "Apply", "OK", "Fortfahren", "Continue", "Schließen", "Close", "Fertig", "Done"}
 repeat 2000 times
@@ -347,7 +350,7 @@ end repeat
         watcher.arguments = [watcherFile.path]
         try? watcher.run()
 
-        // Hauptkonvertierung
+        // Main conversion
         let scriptFile = desktop.appendingPathComponent("_indd_convert_script.applescript")
         do {
             try script.write(to: scriptFile, atomically: true, encoding: .utf8)
@@ -374,7 +377,7 @@ end repeat
             } catch {
                 cont.resume(returning: -1)
             }
-            // Sicherheits-Timeout: nach 600s abbrechen (passt zum Script-Timeout)
+            // Safety timeout: abort after 600s (matches the script timeout).
             DispatchQueue.global().asyncAfter(deadline: .now() + 600) {
                 if process.isRunning {
                     process.terminate()
