@@ -27,3 +27,7 @@ GENERATE_INFOPLIST_FILE = YES
 // ==========================================
 // AI agents can modify Config/INDDConverter.entitlements to add capabilities
 CODE_SIGN_ENTITLEMENTS = Config/INDDConverter.entitlements
+// ==========================================
+// App Icon (Icon Composer / Liquid Glass)
+// ==========================================
+ASSETCATALOG_COMPILER_APPICON_NAME = AppIconGlass
