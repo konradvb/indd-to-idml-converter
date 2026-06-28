@@ -109,8 +109,11 @@ public struct ContentView: View {
                 .padding(.top, 4)
 
                 // Drop-Zone — leer oder mit Inhalt
+                // .fileURL + .folder + .directory deckt normale Dateien UND Finder-Seitenleiste ab
                 dropZone
-                    .onDrop(of: [.fileURL], isTargeted: $isDragging) { handleDrop($0) }
+                    .onDrop(of: [.fileURL, .folder, .directory], isTargeted: $isDragging) { providers, _ in
+                        handleDrop(providers)
+                    }
                     .disabled(converter.isRunning)
 
                 // Fehlermeldung
@@ -487,23 +490,50 @@ public struct ContentView: View {
         Task {
             var dirs: [URL] = []; var files: [URL] = []
             for provider in providers {
-                guard let data = await withCheckedContinuation({ cont in
-                    provider.loadItem(forTypeIdentifier: "public.file-url", options: nil) { item, _ in
-                        cont.resume(returning: item as? Data)
+                // Mehrere UTI-Typen probieren — Finder-Seitenleiste liefert oft public.folder
+                let typeIds = ["public.file-url", "public.folder", "public.directory",
+                               "com.apple.finder.node"]
+                var resolved: URL?
+                for typeId in typeIds {
+                    if !provider.hasItemConformingToTypeIdentifier(typeId) { continue }
+                    if let url = await loadURL(from: provider, typeId: typeId) {
+                        resolved = url; break
                     }
-                }), let url = URL(dataRepresentation: data, relativeTo: nil) else { continue }
-
+                }
+                // Fallback: loadFileRepresentation
+                if resolved == nil {
+                    resolved = await withCheckedContinuation { cont in
+                        provider.loadFileRepresentation(forTypeIdentifier: "public.item") { url, _ in
+                            cont.resume(returning: url.map { URL(fileURLWithPath: $0.path) })
+                        }
+                    }
+                }
+                guard let url = resolved else { continue }
                 var isDir: ObjCBool = false
                 FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir)
                 if isDir.boolValue { dirs.append(url) }
                 else if url.pathExtension.lowercased() == "indd" { files.append(url) }
             }
-            // Neue Roots zur bestehenden Liste hinzufügen (nicht ersetzen)
             let newRoots = dirs + files
             if newRoots.isEmpty { errorMessage = "Keine .indd Dateien oder Ordner erkannt."; return }
             addRoots(newRoots, asFiles: files.isEmpty ? false : dirs.isEmpty)
         }
         return true
+    }
+
+    private func loadURL(from provider: NSItemProvider, typeId: String) async -> URL? {
+        await withCheckedContinuation { cont in
+            provider.loadItem(forTypeIdentifier: typeId, options: nil) { item, _ in
+                if let data = item as? Data,
+                   let url = URL(dataRepresentation: data, relativeTo: nil) {
+                    cont.resume(returning: url)
+                } else if let url = item as? URL {
+                    cont.resume(returning: url)
+                } else {
+                    cont.resume(returning: nil)
+                }
+            }
+        }
     }
 
     private func addRoots(_ urls: [URL], asFiles: Bool) {
