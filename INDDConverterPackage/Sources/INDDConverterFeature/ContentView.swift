@@ -66,21 +66,10 @@ public struct ContentView: View {
 
     public init() {}
 
+    // Reine Anzeige — KEINE State-Mutation hier (würde sonst Render-Schleife/Beachball auslösen)
     var etaString: String? {
-        guard converter.volumeTotalBytes > 0,
-              converter.scannedBytes > 0 else { return nil }
-        let progress = Double(converter.scannedBytes) / Double(converter.volumeTotalBytes)
-        guard progress > 0.003 else { return nil }
-        let elapsed = Date().timeIntervalSince(converter.scanStartTime)
-        let totalEstimated = (elapsed / progress) * 1.7  // 70% Puffer
-        let currentRemaining = totalEstimated - elapsed
-
-        // Peak aktualisieren: ETA darf nur sinken, nie steigen
-        if currentRemaining > converter.peakRemainingSeconds {
-            converter.peakRemainingSeconds = currentRemaining
-        }
-        let remaining = converter.peakRemainingSeconds
-        if remaining < 10 { return nil }
+        let remaining = converter.etaSeconds
+        guard remaining >= 10 else { return nil }
         if remaining < 90 { return "\(Int((remaining / 10).rounded(.up)) * 10) Sek." }
         if remaining < 3600 { return "\(Int(remaining / 60) + 1) Min." }
         return String(format: "%.0f Std. %d Min.", floor(remaining / 3600), Int((remaining.truncatingRemainder(dividingBy: 3600)) / 60) + 1)
@@ -637,6 +626,7 @@ public struct ContentView: View {
     }
 
     private func cancelScan() {
+        converter.cancelScan()      // stoppt den laufenden Hintergrund-Scan
         scanTask?.cancel(); scanTask = nil
         converter.isSearching = false
     }
