@@ -32,6 +32,12 @@ public class Converter: ObservableObject {
         return enumerator.compactMap { $0 as? URL }.filter { $0.pathExtension.lowercased() == "indd" }
     }
 
+    // Verzeichnisse die macOS-Datenschutz-Dialoge auslösen oder irrelevant sind
+    private nonisolated static let skippedDirectoryNames: Set<String> = [
+        "Music", "Photos Library.photoslibrary", "Pictures",
+        "Library", ".Trash", "node_modules", ".git"
+    ]
+
     // Async mit Live-Fortschritt (für Ordner-Suche)
     public func findInddFilesAsync(in folderURL: URL) async -> [URL] {
         isSearching = true
@@ -41,13 +47,24 @@ public class Converter: ObservableObject {
         return await Task.detached(priority: .userInitiated) {
             guard let enumerator = FileManager.default.enumerator(
                 at: folderURL,
-                includingPropertiesForKeys: [.isRegularFileKey],
+                includingPropertiesForKeys: [.isRegularFileKey, .isDirectoryKey],
                 options: [.skipsHiddenFiles]
             ) else { return [] }
 
             var found: [URL] = []
             while let obj = enumerator.nextObject() {
                 guard let url = obj as? URL else { continue }
+
+                // Geschützte/irrelevante Ordner überspringen
+                var isDir: ObjCBool = false
+                FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir)
+                if isDir.boolValue {
+                    if Converter.skippedDirectoryNames.contains(url.lastPathComponent) {
+                        enumerator.skipDescendants()
+                    }
+                    continue
+                }
+
                 if url.pathExtension.lowercased() == "indd" {
                     found.append(url)
                     let count = found.count
