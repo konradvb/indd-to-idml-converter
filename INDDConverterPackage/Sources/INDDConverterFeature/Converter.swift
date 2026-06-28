@@ -105,30 +105,27 @@ public class Converter: ObservableObject {
             skipPaths.insert("\(home)/\(name)")
         }
 
-        // find-Argumente bauen
-        var args = [folderURL.path]
-        // Ausgeschlossene Verzeichnisse als -path X -prune -o Kette
-        var pruneArgs: [String] = []
-        for p in skipPaths.sorted() {
-            pruneArgs += ["-path", p]
+        // find-Argumente: ( -path P1 -o -path P2 ... ) -prune -o -iname *.indd -print
+        var args = [folderURL.path, "("]
+        let sortedSkip = skipPaths.sorted()
+        for (i, p) in sortedSkip.enumerated() {
+            args += ["-path", p]
+            if i < sortedSkip.count - 1 { args.append("-o") }
         }
-        if !pruneArgs.isEmpty {
-            args += ["("] + interleave(pruneArgs, with: "-o") + [")", "-prune", "-o"]
-        }
-        args += ["-iname", "*.indd", "-print"]
+        args += [")", "-prune", "-o", "-iname", "*.indd", "-print"]
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/find")
         process.arguments = args
         let pipe = Pipe()
         process.standardOutput = pipe
-        process.standardError = Pipe() // Fehler verwerfen
+        process.standardError = Pipe()
 
         var found: [URL] = []
         var buffer = Data()
         var lastUIUpdate = Date()
 
-        process.launch()
+        do { try process.run() } catch { return [] }
 
         // Output laufend lesen (non-blocking)
         let handle = pipe.fileHandleForReading
@@ -165,15 +162,6 @@ public class Converter: ObservableObject {
         let finalCount = found.count
         DispatchQueue.main.async { self.searchCount = finalCount }
         return found
-    }
-
-    private nonisolated func interleave(_ items: [String], with separator: String) -> [String] {
-        var result: [String] = []
-        for (i, item) in items.enumerated() {
-            result.append(item)
-            if i < items.count - 1 { result.append(separator) }
-        }
-        return result
     }
 
     private nonisolated func extractLines(from data: Data) -> ([String], Data) {
