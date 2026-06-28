@@ -38,38 +38,56 @@ public class Converter: ObservableObject {
         "Library", ".Trash", "node_modules", ".git"
     ]
 
-    // Async mit Live-Fortschritt (für Ordner-Suche)
-    public func findInddFilesAsync(in folderURL: URL) async -> [URL] {
+    // System-Pfade die beim Scan von / übersprungen werden (keine .indd dort)
+    private nonisolated static let skippedRootPaths: Set<String> = [
+        "/System", "/usr", "/bin", "/sbin", "/private",
+        "/dev", "/cores", "/opt", "/etc", "/var", "/tmp",
+        "/Volumes"  // Volumes werden separat als eigene Roots behandelt
+    ]
+
+    // Einstiegspunkt: mehrere Roots auf einmal scannen, GB-Summe über alle
+    public func findInddFilesAsync(in roots: [URL]) async -> [URL] {
         isSearching = true
         searchCount = 0
         scannedBytes = 0
         scanBytesPerSecond = 0
         peakRemainingSeconds = 0
+        volumeTotalBytes = 0
         scanStartTime = Date()
 
-        // Nur bei echtem Volume-Root (z.B. /, /Volumes/Backup) die Festplattenkapazität zeigen
-        let isVolumeRoot = (try? folderURL.resourceValues(forKeys: [.isVolumeKey]).isVolume) ?? false
-        if isVolumeRoot {
-            volumeTotalBytes = (try? folderURL.resourceValues(forKeys: [.volumeTotalCapacityKey]).volumeTotalCapacity).flatMap { Int64($0) } ?? 0
-        } else {
-            volumeTotalBytes = 0
-            // Ordnergröße im Hintergrund mit du schätzen
-            Task.detached(priority: .background) {
-                let process = Process()
-                process.executableURL = URL(fileURLWithPath: "/usr/bin/du")
-                process.arguments = ["-sk", folderURL.path]
-                let pipe = Pipe()
-                process.standardOutput = pipe
-                try? process.run()
-                process.waitUntilExit()
-                let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-                if let kb = Int64(output.split(separator: "\t").first?.trimmingCharacters(in: .whitespaces) ?? "") {
-                    await MainActor.run { self.volumeTotalBytes = kb * 1024 }
+        // Gesamtkapazität aller Roots vorab summieren
+        for root in roots {
+            let isVol = (try? root.resourceValues(forKeys: [.isVolumeKey]).isVolume) ?? false
+            if isVol {
+                let cap = (try? root.resourceValues(forKeys: [.volumeTotalCapacityKey]).volumeTotalCapacity).flatMap { Int64($0) } ?? 0
+                volumeTotalBytes += cap
+            } else {
+                Task.detached(priority: .background) { [root] in
+                    let process = Process()
+                    process.executableURL = URL(fileURLWithPath: "/usr/bin/du")
+                    process.arguments = ["-sk", root.path]
+                    let pipe = Pipe(); process.standardOutput = pipe
+                    try? process.run(); process.waitUntilExit()
+                    let out = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+                    if let kb = Int64(out.split(separator: "\t").first?.trimmingCharacters(in: .whitespaces) ?? "") {
+                        await MainActor.run { self.volumeTotalBytes += kb * 1024 }
+                    }
                 }
             }
         }
+
         defer { isSearching = false; currentSearchPath = "" }
 
+        var all: [URL] = []
+        for root in roots {
+            let found = await _scanFolder(root)
+            all.append(contentsOf: found)
+        }
+        return all
+    }
+
+    // Einzelnen Ordner scannen (interner Helfer)
+    private func _scanFolder(_ folderURL: URL) async -> [URL] {
         return await Task.detached(priority: .userInitiated) {
             guard let enumerator = FileManager.default.enumerator(
                 at: folderURL,
@@ -85,10 +103,16 @@ public class Converter: ObservableObject {
                 var isDir: ObjCBool = false
                 FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir)
                 if isDir.boolValue {
+                    let p = url.path
+                    // System-Verzeichnisse beim Scan von Root überspringen
+                    if Converter.skippedRootPaths.contains(p) {
+                        enumerator.skipDescendants()
+                        continue
+                    }
                     if Converter.skippedDirectoryNames.contains(url.lastPathComponent) {
                         enumerator.skipDescendants()
                     } else {
-                        let dirPath = url.path.replacingOccurrences(of: NSHomeDirectory(), with: "~")
+                        let dirPath = p.replacingOccurrences(of: NSHomeDirectory(), with: "~")
                         await MainActor.run { self.currentSearchPath = dirPath }
                     }
                     continue
