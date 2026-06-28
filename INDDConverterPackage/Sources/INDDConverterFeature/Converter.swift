@@ -252,15 +252,22 @@ end repeat
         let pipe = Pipe()
         process.standardError = pipe
 
-        do {
-            try process.run()
-            process.waitUntilExit()
-        } catch {
-            watcher.terminate()
-            try? FileManager.default.removeItem(at: tempIndd)
-            try? FileManager.default.removeItem(at: scriptFile)
-            try? FileManager.default.removeItem(at: watcherFile)
-            return ConversionResult(path: url.path, success: false, error: "osascript starten fehlgeschlagen: \(error.localizedDescription)")
+        // Async warten — blockiert NICHT den Swift-Concurrency-Thread-Pool
+        let exitStatus: Int32 = await withCheckedContinuation { cont in
+            process.terminationHandler = { p in
+                cont.resume(returning: p.terminationStatus)
+            }
+            do {
+                try process.run()
+            } catch {
+                cont.resume(returning: -1)
+            }
+            // Sicherheits-Timeout: nach 360s abbrechen
+            DispatchQueue.global().asyncAfter(deadline: .now() + 360) {
+                if process.isRunning {
+                    process.terminate()
+                }
+            }
         }
 
         watcher.terminate()
@@ -268,7 +275,7 @@ end repeat
         try? FileManager.default.removeItem(at: watcherFile)
         try? FileManager.default.removeItem(at: tempIndd)
 
-        if process.terminationStatus != 0 {
+        if exitStatus != 0 {
             let errData = pipe.fileHandleForReading.readDataToEndOfFile()
             let errMsg = String(data: errData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "Unbekannter Fehler"
             try? FileManager.default.removeItem(at: tempIdml)
