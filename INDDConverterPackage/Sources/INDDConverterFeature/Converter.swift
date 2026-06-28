@@ -7,6 +7,15 @@ public struct ConversionResult: Sendable {
     public let error: String?
 }
 
+// Thread-sicheres Abbruch-Flag, das vom Hintergrund-Scan gelesen werden kann
+final class CancelFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var cancelled = false
+    func cancel() { lock.lock(); cancelled = true; lock.unlock() }
+    func reset() { lock.lock(); cancelled = false; lock.unlock() }
+    var isCancelled: Bool { lock.lock(); defer { lock.unlock() }; return cancelled }
+}
+
 @MainActor
 public class Converter: ObservableObject {
     @Published public var isRunning = false
@@ -47,11 +56,12 @@ public class Converter: ObservableObject {
 
     // Einstiegspunkt: mehrere Roots auf einmal scannen, GB-Summe über alle
     public func findInddFilesAsync(in roots: [URL]) async -> [URL] {
+        cancelFlag.reset()
         isSearching = true
         searchCount = 0
         scannedBytes = 0
         scanBytesPerSecond = 0
-        peakRemainingSeconds = 0
+        etaSeconds = 0
         volumeTotalBytes = 0
         liveFoundFiles = []
         scanStartTime = Date()
@@ -83,13 +93,24 @@ public class Converter: ObservableObject {
         let startTime = scanStartTime
         let result: [URL] = await withCheckedContinuation { cont in
             DispatchQueue.global(qos: .userInitiated).async {
+                // Akkumulatoren über ALLE Roots hinweg — sonst überschreibt
+                // Volume 2 die Treffer von Volume 1 in der Live-Anzeige
                 var all: [URL] = []
+                var totalBytes: Int64 = 0
                 for root in roots {
-                    all.append(contentsOf: self._scanFolderGCD(root, startTime: startTime))
+                    if self.isScanCancelled() { break }
+                    self._scanFolderGCD(root, startTime: startTime,
+                                        allFound: &all, totalBytes: &totalBytes)
                 }
+                let finalCount = all.count
+                let finalSnapshot = all
+                let finalBytes = totalBytes
                 DispatchQueue.main.async {
                     self.isSearching = false
                     self.currentSearchPath = ""
+                    self.scannedBytes = finalBytes
+                    self.searchCount = finalCount
+                    self.liveFoundFiles = finalSnapshot
                     cont.resume(returning: all)
                 }
             }
@@ -97,8 +118,10 @@ public class Converter: ObservableObject {
         return result
     }
 
-    // Scan auf GCD-Thread mit FileManager — robust dank autoreleasepool + errorHandler
-    private nonisolated func _scanFolderGCD(_ folderURL: URL, startTime: Date) -> [URL] {
+    // Scan auf GCD-Thread mit FileManager — robust dank autoreleasepool + errorHandler.
+    // allFound/totalBytes sind kumulativ über alle Roots, damit der Zähler nicht zurückspringt.
+    private nonisolated func _scanFolderGCD(_ folderURL: URL, startTime: Date,
+                                            allFound: inout [URL], totalBytes: inout Int64) {
         let home = NSHomeDirectory()
 
         guard let enumerator = FileManager.default.enumerator(
@@ -106,15 +129,19 @@ public class Converter: ObservableObject {
             includingPropertiesForKeys: [.isDirectoryKey, .fileSizeKey],
             options: [.skipsHiddenFiles],
             errorHandler: { _, _ in true }  // Zugriffsfehler ignorieren, nicht crashen
-        ) else { return [] }
+        ) else { return }
 
-        var found: [URL] = []
         var pendingBytes: Int64 = 0
         var pendingPath = ""
         var lastUIUpdate = Date()
         var done = false
 
+        var loopCounter = 0
         while !done {
+            // Abbruch alle 256 Einträge prüfen (Lock nicht bei jedem File nehmen)
+            loopCounter += 1
+            if loopCounter & 0xFF == 0, isScanCancelled() { return }
+
             // autoreleasepool schützt vor ObjC-Exceptions beim TCC-Dialog-Resume
             autoreleasepool {
                 guard let url = enumerator.nextObject() as? URL else {
@@ -141,37 +168,43 @@ public class Converter: ObservableObject {
                 pendingBytes += fileSize
 
                 if url.pathExtension.lowercased() == "indd" {
-                    found.append(url)
+                    allFound.append(url)
                 }
             }
 
-            // UI alle 0.3s bündeln
+            // UI alle 0.3s bündeln — kumulative Werte melden
             let now = Date()
             if now.timeIntervalSince(lastUIUpdate) >= 0.3 {
                 lastUIUpdate = now
-                let bytes = pendingBytes
-                let count = found.count
-                let path = pendingPath
-                let snapshot = Array(found)
+                totalBytes += pendingBytes
                 pendingBytes = 0
+                let bytes = totalBytes
+                let count = allFound.count
+                let path = pendingPath
+                let snapshot = Array(allFound)
+                let elapsed = Date().timeIntervalSince(startTime)
                 DispatchQueue.main.async {
-                    self.scannedBytes += bytes
+                    self.scannedBytes = bytes
                     self.searchCount = count
                     self.liveFoundFiles = snapshot
                     if !path.isEmpty { self.currentSearchPath = path }
-                    let elapsed = Date().timeIntervalSince(startTime)
-                    if elapsed > 1 { self.scanBytesPerSecond = Double(self.scannedBytes) / elapsed }
+                    if elapsed > 1 { self.scanBytesPerSecond = Double(bytes) / elapsed }
+                    // ETA nur sinkend: erst ab 0.5% Fortschritt, dann nie wieder hoch
+                    if self.volumeTotalBytes > 0 {
+                        let progress = Double(bytes) / Double(self.volumeTotalBytes)
+                        if progress > 0.005, elapsed > 2 {
+                            let remaining = (elapsed / progress) - elapsed
+                            if self.etaSeconds == 0 || remaining < self.etaSeconds {
+                                self.etaSeconds = remaining
+                            }
+                        }
+                    }
                 }
             }
         }
 
-        // Rest flushen
-        let finalBytes = pendingBytes; let finalCount = found.count
-        DispatchQueue.main.async {
-            self.scannedBytes += finalBytes
-            self.searchCount = finalCount
-        }
-        return found
+        // Verbleibende Bytes dieses Ordners in den Gesamtwert übernehmen
+        totalBytes += pendingBytes
     }
 
     @Published public var isSearching = false
@@ -180,9 +213,14 @@ public class Converter: ObservableObject {
     @Published public var scannedBytes: Int64 = 0
     @Published public var volumeTotalBytes: Int64 = 0
     @Published public var scanBytesPerSecond: Double = 0
-    @Published public var peakRemainingSeconds: Double = 0
+    @Published public var etaSeconds: Double = 0
     @Published public var liveFoundFiles: [URL] = []
     public var scanStartTime: Date = Date()
+
+    // Abbruch-Flag, thread-sicher und nonisolated nutzbar (eigene Sendable-Klasse)
+    private let cancelFlag = CancelFlag()
+    public func cancelScan() { cancelFlag.cancel() }
+    private nonisolated func isScanCancelled() -> Bool { cancelFlag.isCancelled }
 
     public func convert(files: [URL]) async {
         isRunning = true
