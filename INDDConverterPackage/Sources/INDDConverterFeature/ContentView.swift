@@ -153,6 +153,12 @@ public struct ContentView: View {
                                  ? "Suche läuft …"
                                  : "\(converter.searchCount) .indd \(converter.searchCount == 1 ? "Datei" : "Dateien") gefunden")
                                 .font(.callout.bold())
+                            Spacer()
+                            if converter.scannedBytes > 0 {
+                                Text(formatBytes(converter.scannedBytes) + " gescannt")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                         if !converter.currentSearchPath.isEmpty {
                             Text(converter.currentSearchPath)
@@ -414,6 +420,14 @@ public struct ContentView: View {
             }
         }
         return true
+    }
+
+    private func formatBytes(_ bytes: Int64) -> String {
+        let gb = Double(bytes) / 1_073_741_824
+        if gb >= 0.1 { return String(format: "%.1f GB", gb) }
+        let mb = Double(bytes) / 1_048_576
+        if mb >= 1 { return String(format: "%.0f MB", mb) }
+        return String(format: "%.0f KB", Double(bytes) / 1024)
     }
 
     private func loadURLs(_ urls: [URL], roots: [URL]) {
