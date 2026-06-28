@@ -1,25 +1,56 @@
 /* App Title */
 "app.title" = "INDD → IDML Converter";
+"app.subtitle" = "Konvertiert .indd Dateien in das offene IDML-Format";
 
 /* Drop Zone */
 "drop.hint" = "Dateien oder Ordner hierher ziehen";
 "drop.button.files" = "Dateien wählen";
 "drop.button.folder" = "Ordner wählen";
+"drop.button.all_drives" = "Alle Laufwerke durchsuchen";
+"drop.add_more" = "Weitere hinzufügen";
 
-/* Status */
+/* Sources box */
+"sources.selected.one" = "1 Quelle ausgewählt";
+"sources.selected.many" = "%lld Quellen ausgewählt";
+"sources.add_files" = "Dateien hinzufügen";
+"sources.add_folder" = "Ordner hinzufügen";
+"sources.remove_all" = "Alle entfernen";
+"divider.help" = "Ziehen, um die beiden Bereiche zu vergrößern/verkleinern";
+
+/* Search */
+"search.running" = "Suche läuft …";
+"search.bytes_of" = "%@ von %@";
+"search.eta" = "· noch ca. %@";
+
+/* Status / found files */
 "status.files.one" = "1 .indd Datei gefunden";
 "status.files.many" = "%lld .indd Dateien gefunden";
 "status.success" = "%lld erfolgreich";
 "status.skipped" = "%lld übersprungen";
 "status.errors" = "%lld Fehler";
 
+/* ETA units */
+"eta.seconds" = "%lld Sek.";
+"eta.minutes" = "%lld Min.";
+"eta.hours_minutes" = "%lld Std. %lld Min.";
+
 /* Buttons */
+"button.start_scan" = "Scan starten";
+"button.cancel" = "Abbrechen";
 "button.start" = "Konvertieren starten";
+"button.rescan" = "Neu scannen";
 "button.reset" = "Neuer Ordner";
 "button.show_finder" = "Im Finder zeigen";
 
 /* Warning */
 "warning.no_indesign" = "Adobe InDesign nicht gefunden – bitte installieren.";
 
-/* Subtitle */
-"app.subtitle" = "Konvertiert .indd Dateien in das offene IDML-Format";
+/* Errors */
+"error.nothing_recognized" = "Keine .indd Dateien oder Ordner erkannt.";
+"error.none_found" = "Keine .indd Dateien gefunden.";
+"error.copy_failed" = "Kopieren fehlgeschlagen: %@";
+"error.script_write_failed" = "Script schreiben fehlgeschlagen: %@";
+"error.osascript_failed" = "osascript starten fehlgeschlagen: %@";
+"error.move_failed" = "Verschieben fehlgeschlagen: %@";
+"error.unknown" = "Unbekannter Fehler";
+"skip.already_converted" = "bereits konvertiert";

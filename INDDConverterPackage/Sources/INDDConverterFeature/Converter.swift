@@ -257,7 +257,7 @@ public class Converter: ObservableObject {
 
         // Skip if the IDML already exists.
         if FileManager.default.fileExists(atPath: idmlURL.path) {
-            return ConversionResult(path: url.path, success: true, error: "bereits konvertiert")
+            return ConversionResult(path: url.path, success: true, error: String(localized: "skip.already_converted", bundle: .module))
         }
 
         try? FileManager.default.removeItem(at: tempIndd)
@@ -266,7 +266,7 @@ public class Converter: ObservableObject {
         do {
             try FileManager.default.copyItem(at: url, to: tempIndd)
         } catch {
-            return ConversionResult(path: url.path, success: false, error: "Kopieren fehlgeschlagen: \(error.localizedDescription)")
+            return ConversionResult(path: url.path, success: false, error: String(format: String(localized: "error.copy_failed", bundle: .module), error.localizedDescription))
         }
 
         let script = """
@@ -358,7 +358,7 @@ end repeat
             watcher.terminate()
             try? FileManager.default.removeItem(at: watcherFile)
             try? FileManager.default.removeItem(at: tempIndd)
-            return ConversionResult(path: url.path, success: false, error: "Script schreiben fehlgeschlagen: \(error.localizedDescription)")
+            return ConversionResult(path: url.path, success: false, error: String(format: String(localized: "error.script_write_failed", bundle: .module), error.localizedDescription))
         }
 
         let process = Process()
@@ -392,7 +392,7 @@ end repeat
 
         if exitStatus != 0 {
             let errData = pipe.fileHandleForReading.readDataToEndOfFile()
-            let errMsg = String(data: errData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "Unbekannter Fehler"
+            let errMsg = String(data: errData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? String(localized: "error.unknown", bundle: .module)
             try? FileManager.default.removeItem(at: tempIdml)
             return ConversionResult(path: url.path, success: false, error: errMsg)
         }
@@ -404,7 +404,7 @@ end repeat
             try FileManager.default.moveItem(at: tempIdml, to: idmlURL)
             return ConversionResult(path: url.path, success: true, error: nil)
         } catch {
-            return ConversionResult(path: url.path, success: false, error: "Verschieben fehlgeschlagen: \(error.localizedDescription)")
+            return ConversionResult(path: url.path, success: false, error: String(format: String(localized: "error.move_failed", bundle: .module), error.localizedDescription))
         }
     }
 }

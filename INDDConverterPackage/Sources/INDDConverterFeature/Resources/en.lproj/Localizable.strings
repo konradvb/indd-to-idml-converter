@@ -1,25 +1,56 @@
 /* App Title */
 "app.title" = "INDD → IDML Converter";
+"app.subtitle" = "Converts .indd files to the open IDML format";
 
 /* Drop Zone */
 "drop.hint" = "Drop files or a folder here";
 "drop.button.files" = "Choose Files";
 "drop.button.folder" = "Choose Folder";
+"drop.button.all_drives" = "Search all drives";
+"drop.add_more" = "Add more";
 
-/* Status */
+/* Sources box */
+"sources.selected.one" = "1 source selected";
+"sources.selected.many" = "%lld sources selected";
+"sources.add_files" = "Add files";
+"sources.add_folder" = "Add folder";
+"sources.remove_all" = "Remove all";
+"divider.help" = "Drag to resize the two areas";
+
+/* Search */
+"search.running" = "Searching …";
+"search.bytes_of" = "%@ of %@";
+"search.eta" = "· ~%@ left";
+
+/* Status / found files */
 "status.files.one" = "1 .indd file found";
 "status.files.many" = "%lld .indd files found";
 "status.success" = "%lld converted";
 "status.skipped" = "%lld skipped";
 "status.errors" = "%lld failed";
 
+/* ETA units */
+"eta.seconds" = "%lld sec";
+"eta.minutes" = "%lld min";
+"eta.hours_minutes" = "%lld h %lld min";
+
 /* Buttons */
+"button.start_scan" = "Start scan";
+"button.cancel" = "Cancel";
 "button.start" = "Start Conversion";
+"button.rescan" = "Scan again";
 "button.reset" = "Choose Another Folder";
 "button.show_finder" = "Show in Finder";
 
 /* Warning */
 "warning.no_indesign" = "Adobe InDesign not found – please install it first.";
 
-/* Subtitle */
-"app.subtitle" = "Converts .indd files to the open IDML format";
+/* Errors */
+"error.nothing_recognized" = "No .indd files or folders recognized.";
+"error.none_found" = "No .indd files found.";
+"error.copy_failed" = "Copy failed: %@";
+"error.script_write_failed" = "Could not write the script: %@";
+"error.osascript_failed" = "Could not start osascript: %@";
+"error.move_failed" = "Move failed: %@";
+"error.unknown" = "Unknown error";
+"skip.already_converted" = "already converted";

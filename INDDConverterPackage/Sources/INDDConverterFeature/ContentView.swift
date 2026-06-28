@@ -81,9 +81,15 @@ public struct ContentView: View {
     var etaString: String? {
         let remaining = converter.etaSeconds
         guard remaining >= 10 else { return nil }
-        if remaining < 90 { return "\(Int((remaining / 10).rounded(.up)) * 10) Sek." }
-        if remaining < 3600 { return "\(Int(remaining / 60) + 1) Min." }
-        return String(format: "%.0f Std. %d Min.", floor(remaining / 3600), Int((remaining.truncatingRemainder(dividingBy: 3600)) / 60) + 1)
+        if remaining < 90 {
+            return String(format: String(localized: "eta.seconds", bundle: .module), Int((remaining / 10).rounded(.up)) * 10)
+        }
+        if remaining < 3600 {
+            return String(format: String(localized: "eta.minutes", bundle: .module), Int(remaining / 60) + 1)
+        }
+        return String(format: String(localized: "eta.hours_minutes", bundle: .module),
+                      Int(floor(remaining / 3600)),
+                      Int((remaining.truncatingRemainder(dividingBy: 3600)) / 60) + 1)
     }
 
     var successCount: Int { converter.results.filter { $0.success && $0.error == nil }.count }
@@ -143,7 +149,7 @@ public struct ContentView: View {
                     dragStartList = nil
                 }
         )
-        .help("Ziehen, um die Felder größer/kleiner zu machen")
+        .help(String(localized: "divider.help", bundle: .module))
     }
 
     public var body: some View {
@@ -259,7 +265,7 @@ public struct ContentView: View {
                     } label: {
                         HStack(spacing: 5) {
                             Image(systemName: "externaldrive.fill.badge.checkmark")
-                            Text("Alle Laufwerke durchsuchen")
+                            Text(String(localized: "drop.button.all_drives", bundle: .module))
                         }
                     }
                     .buttonStyle(.borderedProminent)
@@ -286,7 +292,9 @@ public struct ContentView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     // Title row
                     HStack(spacing: 8) {
-                        Text(sourceRoots.count == 1 ? "1 Quelle ausgewählt" : "\(sourceRoots.count) Quellen ausgewählt")
+                        Text(sourceRoots.count == 1
+                             ? String(localized: "sources.selected.one", bundle: .module)
+                             : String(format: String(localized: "sources.selected.many", bundle: .module), sourceRoots.count))
                             .font(.callout.bold())
                             .foregroundStyle(.primary)
                         Spacer()
@@ -300,7 +308,7 @@ public struct ContentView: View {
                                         .contentShape(Rectangle())
                                 }
                                 .buttonStyle(.borderless).foregroundStyle(.blue)
-                                .help("Dateien hinzufügen")
+                                .help(String(localized: "sources.add_files", bundle: .module))
 
                                 Button { pickFolder() } label: {
                                     Image(systemName: "folder.badge.plus")
@@ -309,7 +317,7 @@ public struct ContentView: View {
                                         .contentShape(Rectangle())
                                 }
                                 .buttonStyle(.borderless).foregroundStyle(.blue)
-                                .help("Ordner hinzufügen")
+                                .help(String(localized: "sources.add_folder", bundle: .module))
 
                                 Button { fullReset() } label: {
                                     Image(systemName: "trash")
@@ -318,7 +326,7 @@ public struct ContentView: View {
                                         .contentShape(Rectangle())
                                 }
                                 .buttonStyle(.borderless).foregroundStyle(.secondary)
-                                .help("Alle entfernen")
+                                .help(String(localized: "sources.remove_all", bundle: .module))
                             }
                         }
                     }
@@ -385,7 +393,7 @@ public struct ContentView: View {
                         Divider().padding(.horizontal, 8)
                         HStack(spacing: 6) {
                             Image(systemName: "plus.circle.fill").foregroundStyle(.blue).font(.caption)
-                            Text("Weitere hinzufügen").font(.caption).foregroundStyle(.blue)
+                            Text(String(localized: "drop.add_more", bundle: .module)).font(.caption).foregroundStyle(.blue)
                         }
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 6)
@@ -406,7 +414,7 @@ public struct ContentView: View {
             HStack(spacing: 8) {
                 ProgressView().controlSize(.small)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("Suche läuft …").font(.callout.bold())
+                    Text(String(localized: "search.running", bundle: .module)).font(.callout.bold())
                     if !converter.currentSearchPath.isEmpty {
                         Text(converter.currentSearchPath)
                             .font(.caption2).foregroundStyle(.secondary)
@@ -414,7 +422,7 @@ public struct ContentView: View {
                     }
                 }
                 Spacer()
-                Button("Abbrechen") { cancelScan() }
+                Button(String(localized: "button.cancel", bundle: .module)) { cancelScan() }
                     .buttonStyle(.bordered).controlSize(.small)
             }
 
@@ -424,7 +432,8 @@ public struct ContentView: View {
                 VStack(alignment: .leading, spacing: 3) {
                     ProgressView(value: progress).progressViewStyle(.linear).tint(.blue)
                     HStack {
-                        Text("\(formatBytes(converter.scannedBytes)) von \(formatBytes(converter.volumeTotalBytes))")
+                        Text(String(format: String(localized: "search.bytes_of", bundle: .module),
+                                    formatBytes(converter.scannedBytes), formatBytes(converter.volumeTotalBytes)))
                             .font(.caption2).foregroundStyle(.secondary)
                         Spacer()
                         if converter.scanBytesPerSecond > 0 {
@@ -432,7 +441,8 @@ public struct ContentView: View {
                                 .font(.caption2).foregroundStyle(.secondary)
                         }
                         if let eta = etaString {
-                            Text("· noch ca. \(eta)").font(.caption2).foregroundStyle(.secondary)
+                            Text(String(format: String(localized: "search.eta", bundle: .module), eta))
+                                .font(.caption2).foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -443,7 +453,9 @@ public struct ContentView: View {
                 Divider()
                 HStack {
                     Image(systemName: "doc.text.fill").foregroundStyle(.blue).font(.caption)
-                    Text("\(converter.searchCount) .indd \(converter.searchCount == 1 ? "Datei" : "Dateien") gefunden")
+                    Text(converter.searchCount == 1
+                         ? String(localized: "status.files.one", bundle: .module)
+                         : String(format: String(localized: "status.files.many", bundle: .module), converter.searchCount))
                         .font(.caption.bold()).foregroundStyle(.blue)
                 }
                 // Live list of ALL found files — scrollable even during the search.
@@ -491,7 +503,7 @@ public struct ContentView: View {
                 Label(text, systemImage: "doc.fill").font(.callout.bold()).foregroundStyle(.blue)
                 Spacer()
                 if !sourceRoots.isEmpty {
-                    Button("Im Finder zeigen") {
+                    Button(String(localized: "button.show_finder", bundle: .module)) {
                         NSWorkspace.shared.activateFileViewerSelecting(sourceRoots)
                     }
                     .buttonStyle(.plain).font(.caption).foregroundStyle(.blue)
@@ -576,7 +588,7 @@ public struct ContentView: View {
     private var actionButtons: some View {
         VStack(spacing: 8) {
             if !sourceRoots.isEmpty && !converter.isSearching && foundFiles.isEmpty && converter.results.isEmpty {
-                Button("Scan starten") { startScan() }
+                Button(String(localized: "button.start_scan", bundle: .module)) { startScan() }
                     .buttonStyle(.borderedProminent).controlSize(.large)
             }
             // The Cancel button already lives in searchProgressView — not repeated here.
@@ -589,7 +601,7 @@ public struct ContentView: View {
                     .buttonStyle(.borderedProminent).controlSize(.large)
                     .disabled(!inDesignInstalled)
 
-                    Button("Neu scannen") { resetToRoots() }
+                    Button(String(localized: "button.rescan", bundle: .module)) { resetToRoots() }
                         .buttonStyle(.bordered).controlSize(.regular)
                 }
             }
@@ -646,7 +658,7 @@ public struct ContentView: View {
                 else if url.pathExtension.lowercased() == "indd" { files.append(url) }
             }
             let newRoots = dirs + files
-            if newRoots.isEmpty { errorMessage = "Keine .indd Dateien oder Ordner erkannt."; return }
+            if newRoots.isEmpty { errorMessage = String(localized: "error.nothing_recognized", bundle: .module); return }
             addRoots(newRoots, asFiles: files.isEmpty ? false : dirs.isEmpty)
         }
         return true
@@ -710,7 +722,7 @@ public struct ContentView: View {
             }
             if Task.isCancelled { return }
             foundFiles = all
-            if all.isEmpty { errorMessage = "Keine .indd Dateien gefunden." }
+            if all.isEmpty { errorMessage = String(localized: "error.none_found", bundle: .module) }
         }
     }
 
