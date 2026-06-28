@@ -42,7 +42,14 @@ public class Converter: ObservableObject {
     public func findInddFilesAsync(in folderURL: URL) async -> [URL] {
         isSearching = true
         searchCount = 0
-        defer { isSearching = false }
+        scannedBytes = 0
+        totalBytes = (try? folderURL.resourceValues(forKeys: [.volumeTotalCapacityKey]).volumeTotalCapacity).flatMap { Int64($0) } ?? 0
+        // Bessere Schätzung: Größe des Ordners selbst
+        if let attrs = try? FileManager.default.attributesOfItem(atPath: folderURL.path),
+           let size = attrs[.size] as? Int64 {
+            totalBytes = size
+        }
+        defer { isSearching = false; currentSearchPath = "" }
 
         return await Task.detached(priority: .userInitiated) {
             guard let enumerator = FileManager.default.enumerator(
@@ -68,10 +75,18 @@ public class Converter: ObservableObject {
                     continue
                 }
 
+                // Dateigröße zum Scan-Fortschritt addieren
+                let fileSize = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize).flatMap { Int64($0) } ?? 0
+
                 if url.pathExtension.lowercased() == "indd" {
                     found.append(url)
                     let count = found.count
-                    await MainActor.run { self.searchCount = count }
+                    await MainActor.run {
+                        self.searchCount = count
+                        self.scannedBytes += fileSize
+                    }
+                } else {
+                    await MainActor.run { self.scannedBytes += fileSize }
                 }
             }
             return found
@@ -81,6 +96,8 @@ public class Converter: ObservableObject {
     @Published public var isSearching = false
     @Published public var searchCount = 0
     @Published public var currentSearchPath = ""
+    @Published public var scannedBytes: Int64 = 0
+    @Published public var totalBytes: Int64 = 0
 
     public func convert(files: [URL]) async {
         isRunning = true
