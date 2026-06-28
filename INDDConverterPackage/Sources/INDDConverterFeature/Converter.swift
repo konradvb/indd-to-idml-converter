@@ -22,6 +22,7 @@ public class Converter: ObservableObject {
         return items.contains { $0.lastPathComponent.hasPrefix("Adobe InDesign") }
     }
 
+    // Synchron (für Drop-Handler von einzelnen Dateien)
     public func findInddFiles(in folderURL: URL) -> [URL] {
         guard let enumerator = FileManager.default.enumerator(
             at: folderURL,
@@ -30,6 +31,35 @@ public class Converter: ObservableObject {
         ) else { return [] }
         return enumerator.compactMap { $0 as? URL }.filter { $0.pathExtension.lowercased() == "indd" }
     }
+
+    // Async mit Live-Fortschritt (für Ordner-Suche)
+    public func findInddFilesAsync(in folderURL: URL) async -> [URL] {
+        isSearching = true
+        searchCount = 0
+        defer { isSearching = false }
+
+        return await Task.detached(priority: .userInitiated) {
+            guard let enumerator = FileManager.default.enumerator(
+                at: folderURL,
+                includingPropertiesForKeys: [.isRegularFileKey],
+                options: [.skipsHiddenFiles]
+            ) else { return [] }
+
+            var found: [URL] = []
+            while let obj = enumerator.nextObject() {
+                guard let url = obj as? URL else { continue }
+                if url.pathExtension.lowercased() == "indd" {
+                    found.append(url)
+                    let count = found.count
+                    await MainActor.run { self.searchCount = count }
+                }
+            }
+            return found
+        }.value
+    }
+
+    @Published public var isSearching = false
+    @Published public var searchCount = 0
 
     public func convert(files: [URL]) async {
         isRunning = true
