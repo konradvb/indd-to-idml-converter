@@ -1,0 +1,22 @@
+/* App Title */
+"app.title" = "INDD → IDML Converter";
+
+/* Drop Zone */
+"drop.hint" = "Drop a folder here";
+"drop.button" = "Choose Folder";
+
+/* Status */
+"status.files.one" = "1 .indd file found";
+"status.files.many" = "%lld .indd files found";
+"status.success" = "%lld converted";
+"status.errors" = "%lld failed";
+
+/* Buttons */
+"button.start" = "Start Conversion";
+"button.reset" = "Choose Another Folder";
+
+/* Warning */
+"warning.no_indesign" = "Adobe InDesign not found – please install it first.";
+
+/* Subtitle */
+"app.subtitle" = "Converts .indd files to the open IDML format";
