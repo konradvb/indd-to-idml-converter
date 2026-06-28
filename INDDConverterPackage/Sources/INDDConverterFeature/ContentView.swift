@@ -13,7 +13,7 @@ private struct ResultRow: View {
             let target = (result.success && !isSkipped) ? idmlURL : fileURL
             NSWorkspace.shared.activateFileViewerSelecting([target])
         } label: {
-            HStack(spacing: 5) {
+            HStack(spacing: 6) {
                 resultIcon(isSkipped: isSkipped)
                 Text(fileURL.lastPathComponent)
                     .font(.caption)
@@ -27,18 +27,18 @@ private struct ResultRow: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .truncationMode(.tail)
-                        .frame(maxWidth: 140, alignment: .trailing)
+                        .frame(maxWidth: 130, alignment: .trailing)
                 }
                 Image(systemName: "arrow.right.circle")
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
             }
-            .padding(.horizontal, 6)
-            .padding(.vertical, 3)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .background(RoundedRectangle(cornerRadius: 5).fill(Color(nsColor: .controlBackgroundColor).opacity(0.6)))
+        .background(RoundedRectangle(cornerRadius: 5).fill(Color(nsColor: .windowBackgroundColor)))
     }
 
     @ViewBuilder
@@ -79,72 +79,39 @@ public struct ContentView: View {
     var skippedCount: Int { converter.results.filter { $0.success && $0.error != nil }.count }
     var errorCount: Int { converter.results.filter { !$0.success }.count }
 
+    // Zustand der Drop-Zone
+    private var dropZoneIsEmpty: Bool {
+        sourceRoots.isEmpty && !converter.isSearching
+    }
+
     public var body: some View {
         VStack(spacing: 0) {
-            // InDesign-Warnung
             if !inDesignInstalled {
                 HStack(spacing: 8) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
-                    Text(String(localized: "warning.no_indesign", bundle: .module))
-                        .font(.callout)
+                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                    Text(String(localized: "warning.no_indesign", bundle: .module)).font(.callout)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.vertical, 10)
-                .padding(.horizontal, 16)
+                .padding(.vertical, 10).padding(.horizontal, 16)
                 .background(.orange.opacity(0.12))
             }
 
-            VStack(spacing: 28) {
+            VStack(spacing: 20) {
                 // Header
                 VStack(spacing: 6) {
                     Image(systemName: "arrow.triangle.2.circlepath.doc.fill")
-                        .font(.system(size: 44))
+                        .font(.system(size: 40))
                         .foregroundStyle(.blue.gradient)
-                    Text(String(localized: "app.title", bundle: .module))
-                        .font(.title2.bold())
+                    Text(String(localized: "app.title", bundle: .module)).font(.title2.bold())
                     Text(String(localized: "app.subtitle", bundle: .module))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(.caption).foregroundStyle(.secondary)
                 }
                 .padding(.top, 4)
 
-                // Drop-Zone
-                ZStack {
-                    RoundedRectangle(cornerRadius: 14)
-                        .fill(isDragging ? .blue.opacity(0.08) : Color(nsColor: .controlBackgroundColor))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 14)
-                                .strokeBorder(
-                                    isDragging ? Color.blue : Color.secondary.opacity(0.3),
-                                    style: StrokeStyle(lineWidth: 1.5, dash: isDragging ? [] : [6])
-                                )
-                        )
-                        .frame(height: 130)
-                        .animation(.easeInOut(duration: 0.15), value: isDragging)
-
-                    VStack(spacing: 10) {
-                        Image(systemName: isDragging ? "folder.badge.plus" : "doc.badge.plus")
-                            .font(.system(size: 30))
-                            .foregroundStyle(isDragging ? .blue : .secondary)
-                            .animation(.easeInOut(duration: 0.15), value: isDragging)
-                        Text(String(localized: "drop.hint", bundle: .module))
-                            .foregroundStyle(.secondary)
-                            .font(.callout)
-                        HStack(spacing: 8) {
-                            Button(String(localized: "drop.button.files", bundle: .module)) { pickFiles() }
-                                .buttonStyle(.bordered)
-                                .controlSize(.small)
-                            Button(String(localized: "drop.button.folder", bundle: .module)) { pickFolder() }
-                                .buttonStyle(.bordered)
-                                .controlSize(.small)
-                        }
-                    }
-                }
-                .onDrop(of: [.fileURL], isTargeted: $isDragging) { providers in
-                    handleDrop(providers)
-                }
-                .disabled(converter.isRunning)
+                // Drop-Zone — leer oder mit Inhalt
+                dropZone
+                    .onDrop(of: [.fileURL], isTargeted: $isDragging) { handleDrop($0) }
+                    .disabled(converter.isRunning)
 
                 // Fehlermeldung
                 if let error = errorMessage {
@@ -155,256 +122,295 @@ public struct ContentView: View {
                 }
 
                 // Suchfortschritt
-                if converter.isSearching {
-                    VStack(alignment: .leading, spacing: 8) {
-                        // Kopfzeile: Dateien + Geschwindigkeit
-                        HStack {
-                            HStack(spacing: 6) {
-                                ProgressView().controlSize(.small)
-                                Text(converter.searchCount == 0
-                                     ? "Suche läuft …"
-                                     : "\(converter.searchCount) .indd \(converter.searchCount == 1 ? "Datei" : "Dateien") gefunden")
-                                    .font(.callout.bold())
-                            }
-                            Spacer()
-                            if converter.scanBytesPerSecond > 0 {
-                                Text(formatBytes(Int64(converter.scanBytesPerSecond)) + "/s")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
+                if converter.isSearching { searchProgressView }
 
-                        // GB-Fortschrittsbalken
-                        if converter.volumeTotalBytes > 0 && converter.scannedBytes > 0 {
-                            let progress = min(1.0, Double(converter.scannedBytes) / Double(converter.volumeTotalBytes))
-                            VStack(alignment: .leading, spacing: 3) {
-                                ProgressView(value: progress)
-                                    .progressViewStyle(.linear)
-                                    .tint(.blue)
-                                HStack {
-                                    Text("\(formatBytes(converter.scannedBytes)) von \(formatBytes(converter.volumeTotalBytes))")
-                                        .font(.caption2)
-                                        .foregroundStyle(.secondary)
-                                    Spacer()
-                                    if let eta = etaString {
-                                        Text("noch ca. \(eta)")
-                                            .font(.caption2)
-                                            .foregroundStyle(.secondary)
-                                    }
+                // Gefundene Dateien (nach Scan, vor Konvertierung)
+                if !foundFiles.isEmpty && !converter.isRunning && converter.results.isEmpty {
+                    foundFilesView
+                }
+
+                // Konvertierungs-Fortschritt
+                if converter.isRunning {
+                    VStack(spacing: 8) {
+                        ProgressView(value: converter.progress)
+                            .progressViewStyle(.linear).tint(.blue)
+                        Text(converter.currentFile)
+                            .font(.caption).foregroundStyle(.secondary)
+                            .lineLimit(1).truncationMode(.middle)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+
+                // Ergebnisse
+                if !converter.results.isEmpty && !converter.isRunning { resultsView }
+
+                // Aktionsbuttons
+                actionButtons
+            }
+            .padding(20)
+        }
+        .frame(width: 440)
+        .background(Color(nsColor: .windowBackgroundColor))
+    }
+
+    // MARK: - Drop Zone
+
+    @ViewBuilder
+    private var dropZone: some View {
+        if dropZoneIsEmpty {
+            // Leer: klassische Drop-Zone
+            ZStack {
+                RoundedRectangle(cornerRadius: 14)
+                    .fill(isDragging ? Color.blue.opacity(0.08) : Color(nsColor: .controlBackgroundColor))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14)
+                            .strokeBorder(
+                                isDragging ? Color.blue : Color.secondary.opacity(0.3),
+                                style: StrokeStyle(lineWidth: 1.5, dash: isDragging ? [] : [6])
+                            )
+                    )
+                    .animation(.easeInOut(duration: 0.15), value: isDragging)
+
+                VStack(spacing: 10) {
+                    Image(systemName: isDragging ? "folder.badge.plus" : "doc.badge.plus")
+                        .font(.system(size: 32))
+                        .foregroundStyle(isDragging ? Color.blue : Color.secondary)
+                        .animation(.easeInOut(duration: 0.15), value: isDragging)
+                    Text(String(localized: "drop.hint", bundle: .module))
+                        .foregroundStyle(.secondary).font(.callout)
+                    HStack(spacing: 8) {
+                        Button(String(localized: "drop.button.files", bundle: .module)) { pickFiles() }
+                            .buttonStyle(.bordered).controlSize(.small)
+                        Button(String(localized: "drop.button.folder", bundle: .module)) { pickFolder() }
+                            .buttonStyle(.bordered).controlSize(.small)
+                    }
+                }
+            }
+            .frame(minHeight: 130)
+
+        } else {
+            // Gefüllt: zeigt Roots als Kacheln
+            ZStack(alignment: .topTrailing) {
+                RoundedRectangle(cornerRadius: 14)
+                    .fill(isDragging ? Color.blue.opacity(0.08) : Color(nsColor: .controlBackgroundColor))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14)
+                            .strokeBorder(
+                                isDragging ? Color.blue : Color.blue.opacity(0.25),
+                                lineWidth: 1.5
+                            )
+                    )
+                    .animation(.easeInOut(duration: 0.15), value: isDragging)
+
+                VStack(alignment: .leading, spacing: 0) {
+                    // Titelzeile
+                    HStack {
+                        Text(sourceRoots.count == 1 ? "Ausgewählt" : "\(sourceRoots.count) Quellen")
+                            .font(.caption.bold())
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        // Weiteres hinzufügen
+                        if !converter.isSearching {
+                            HStack(spacing: 6) {
+                                Button { pickFiles() } label: {
+                                    Image(systemName: "plus.circle").font(.caption)
                                 }
-                            }
-                        }
-
-                        // Aktueller Pfad
-                        if !converter.currentSearchPath.isEmpty {
-                            Text(converter.currentSearchPath)
-                                .font(.caption)
-                                .foregroundStyle(.tertiary)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 10)
-                    .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
-                }
-
-                // Roots anzeigen (vor dem Scan)
-                if !sourceRoots.isEmpty && !converter.isSearching && foundFiles.isEmpty && converter.results.isEmpty {
-                    VStack(alignment: .leading, spacing: 4) {
-                        ForEach(sourceRoots, id: \.path) { root in
-                            HStack(spacing: 6) {
-                                Image(systemName: root.hasDirectoryPath ? "folder.fill" : "doc.fill")
-                                    .foregroundStyle(.blue)
-                                    .font(.caption)
-                                Text(root.path.replacingOccurrences(of: NSHomeDirectory(), with: "~"))
-                                    .font(.caption)
-                                    .lineLimit(1)
-                                    .truncationMode(.middle)
-                                    .foregroundStyle(.primary)
+                                .buttonStyle(.plain).foregroundStyle(.blue)
+                                Button { pickFolder() } label: {
+                                    Image(systemName: "folder.badge.plus").font(.caption)
+                                }
+                                .buttonStyle(.plain).foregroundStyle(.blue)
+                                Button { fullReset() } label: {
+                                    Image(systemName: "xmark.circle.fill").font(.caption)
+                                }
+                                .buttonStyle(.plain).foregroundStyle(.secondary)
                             }
                         }
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 8)
-                    .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
-                }
+                    .padding(.horizontal, 12).padding(.top, 10).padding(.bottom, 6)
 
-                // Status-Bereich
-                if !foundFiles.isEmpty || converter.isRunning || !converter.results.isEmpty {
-                    VStack(spacing: 14) {
-                        if converter.results.isEmpty && !converter.isRunning {
-                            fileCountBadge
-                            // Dateiliste vor der Konvertierung
-                            if !foundFiles.isEmpty {
-                                ScrollView {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        ForEach(Array(foundFiles.enumerated()), id: \.offset) { _, url in
+                    Divider().padding(.horizontal, 8)
+
+                    // Root-Kacheln
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 3) {
+                            ForEach(sourceRoots, id: \.path) { root in
+                                Button {
+                                    NSWorkspace.shared.activateFileViewerSelecting([root])
+                                } label: {
+                                    HStack(spacing: 8) {
+                                        ZStack {
+                                            RoundedRectangle(cornerRadius: 6)
+                                                .fill(Color.blue.opacity(0.12))
+                                                .frame(width: 28, height: 28)
+                                            Image(systemName: root.hasDirectoryPath ? "folder.fill" : "doc.fill")
+                                                .font(.system(size: 14))
+                                                .foregroundStyle(.blue)
+                                        }
+                                        VStack(alignment: .leading, spacing: 1) {
+                                            Text(root.lastPathComponent)
+                                                .font(.callout.bold())
+                                                .foregroundStyle(.primary)
+                                                .lineLimit(1)
+                                            Text(root.deletingLastPathComponent().path
+                                                    .replacingOccurrences(of: NSHomeDirectory(), with: "~"))
+                                                .font(.caption2)
+                                                .foregroundStyle(.secondary)
+                                                .lineLimit(1)
+                                                .truncationMode(.head)
+                                        }
+                                        Spacer()
+                                        if !converter.isSearching {
                                             Button {
-                                                NSWorkspace.shared.activateFileViewerSelecting([url])
+                                                sourceRoots.removeAll { $0 == root }
+                                                if sourceRoots.isEmpty { fullReset() }
                                             } label: {
-                                                HStack(spacing: 5) {
-                                                    Image(systemName: "doc").font(.caption2).foregroundStyle(.secondary)
-                                                    Text(url.lastPathComponent).font(.caption).lineLimit(1).truncationMode(.middle).foregroundStyle(.primary)
-                                                    Spacer()
-                                                    Text(url.deletingLastPathComponent().path.replacingOccurrences(of: NSHomeDirectory(), with: "~"))
-                                                        .font(.caption2).foregroundStyle(.tertiary).lineLimit(1).truncationMode(.head)
-                                                        .frame(maxWidth: 130, alignment: .trailing)
-                                                }
-                                                .padding(.horizontal, 6).padding(.vertical, 2).contentShape(Rectangle())
+                                                Image(systemName: "minus.circle")
+                                                    .font(.caption).foregroundStyle(.secondary)
                                             }
                                             .buttonStyle(.plain)
                                         }
                                     }
-                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.horizontal, 10).padding(.vertical, 5)
+                                    .contentShape(Rectangle())
                                 }
-                                .frame(maxHeight: 120)
-                                .padding(6)
-                                .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
+                                .buttonStyle(.plain)
                             }
                         }
+                        .padding(.vertical, 4)
+                    }
+                    .frame(maxHeight: 140)
 
-                        if converter.isRunning {
-                            VStack(spacing: 8) {
-                                ProgressView(value: converter.progress)
-                                    .progressViewStyle(.linear)
-                                    .tint(.blue)
-                                Text(converter.currentFile)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                                    .truncationMode(.middle)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                            }
+                    // Drag-Hinweis unten
+                    if isDragging {
+                        Divider().padding(.horizontal, 8)
+                        HStack(spacing: 6) {
+                            Image(systemName: "plus.circle.fill").foregroundStyle(.blue).font(.caption)
+                            Text("Weitere hinzufügen").font(.caption).foregroundStyle(.blue)
                         }
-
-                        if !converter.results.isEmpty && !converter.isRunning {
-                            resultsRow
-                        }
-                    }
-                }
-
-                // Aktionsbuttons
-                VStack(spacing: 10) {
-                    // Scan starten (Roots geladen, noch nicht gescannt)
-                    if !sourceRoots.isEmpty && !converter.isSearching && foundFiles.isEmpty && converter.results.isEmpty {
-                        Button("Scan starten") { startScan() }
-                            .buttonStyle(.borderedProminent)
-                            .controlSize(.large)
-                    }
-
-                    // Scan abbrechen
-                    if converter.isSearching {
-                        Button("Abbrechen") { cancelScan() }
-                            .buttonStyle(.bordered)
-                            .controlSize(.regular)
-                            .foregroundStyle(.red)
-                    }
-
-                    // Konvertierung starten
-                    if !foundFiles.isEmpty && !converter.isRunning && !converter.isSearching && converter.results.isEmpty {
-                        HStack(spacing: 10) {
-                            Button(String(localized: "button.start", bundle: .module)) {
-                                errorMessage = nil
-                                Task { await converter.convert(files: foundFiles) }
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .controlSize(.large)
-                            .disabled(!inDesignInstalled)
-
-                            Button("Neu scannen") { resetToRoots() }
-                                .buttonStyle(.bordered)
-                                .controlSize(.regular)
-                        }
-                    }
-
-                    // Konvertierung abbrechen (falls implementiert) + Reset
-                    if !converter.results.isEmpty && !converter.isRunning {
-                        Button(String(localized: "button.reset", bundle: .module)) { fullReset() }
-                            .buttonStyle(.bordered)
-                            .controlSize(.regular)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
                     }
                 }
             }
-            .padding(24)
-        }
-        .frame(width: 420)
-        .background(Color(nsColor: .windowBackgroundColor))
-    }
-
-    @ViewBuilder
-    private var fileCountBadge: some View {
-        let count = foundFiles.count
-        let text = count == 1
-            ? String(localized: "status.files.one", bundle: .module)
-            : String(format: String(localized: "status.files.many", bundle: .module), count)
-
-        VStack(spacing: 8) {
-            HStack(spacing: 6) {
-                Image(systemName: "doc.fill").foregroundStyle(.blue)
-                Text(text).font(.callout).foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(.blue.opacity(0.08), in: Capsule())
-
-            // Quellpfade anzeigen
-            VStack(alignment: .leading, spacing: 3) {
-                ForEach(sourceRoots, id: \.path) { root in
-                    Button {
-                        NSWorkspace.shared.activateFileViewerSelecting([root])
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: root.hasDirectoryPath ? "folder" : "doc")
-                                .font(.caption2)
-                            Text(root.path.replacingOccurrences(of: NSHomeDirectory(), with: "~"))
-                                .font(.caption)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                        }
-                        .foregroundStyle(.blue)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 4)
+            .animation(.easeInOut(duration: 0.2), value: isDragging)
         }
     }
 
+    // MARK: - Suchfortschritt
+
     @ViewBuilder
-    private var resultsRow: some View {
+    private var searchProgressView: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.small)
+                    Text(converter.searchCount == 0
+                         ? "Ordner wird durchsucht …"
+                         : "\(converter.searchCount) .indd \(converter.searchCount == 1 ? "Datei" : "Dateien") gefunden")
+                        .font(.callout.bold())
+                }
+                Spacer()
+                if converter.scanBytesPerSecond > 0 {
+                    Text(formatBytes(Int64(converter.scanBytesPerSecond)) + "/s")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            if converter.volumeTotalBytes > 0 && converter.scannedBytes > 0 {
+                let progress = min(1.0, Double(converter.scannedBytes) / Double(converter.volumeTotalBytes))
+                VStack(alignment: .leading, spacing: 3) {
+                    ProgressView(value: progress).progressViewStyle(.linear).tint(.blue)
+                    HStack {
+                        Text("\(formatBytes(converter.scannedBytes)) von \(formatBytes(converter.volumeTotalBytes))")
+                            .font(.caption2).foregroundStyle(.secondary)
+                        Spacer()
+                        if let eta = etaString {
+                            Text("noch ca. \(eta)").font(.caption2).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+            if !converter.currentSearchPath.isEmpty {
+                Text(converter.currentSearchPath)
+                    .font(.caption).foregroundStyle(.tertiary)
+                    .lineLimit(1).truncationMode(.middle)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding(.horizontal, 12).padding(.vertical, 10)
+        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    // MARK: - Gefundene Dateien
+
+    @ViewBuilder
+    private var foundFilesView: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            let count = foundFiles.count
+            let text = count == 1
+                ? String(localized: "status.files.one", bundle: .module)
+                : String(format: String(localized: "status.files.many", bundle: .module), count)
+            HStack {
+                Label(text, systemImage: "doc.fill").font(.callout.bold()).foregroundStyle(.blue)
+                Spacer()
+                if !sourceRoots.isEmpty {
+                    Button("Im Finder zeigen") {
+                        NSWorkspace.shared.activateFileViewerSelecting(sourceRoots)
+                    }
+                    .buttonStyle(.plain).font(.caption).foregroundStyle(.blue)
+                }
+            }
+            Divider()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(Array(foundFiles.enumerated()), id: \.offset) { _, url in
+                        Button {
+                            NSWorkspace.shared.activateFileViewerSelecting([url])
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "doc").font(.caption2).foregroundStyle(.blue)
+                                Text(url.lastPathComponent)
+                                    .font(.caption).lineLimit(1).truncationMode(.middle).foregroundStyle(.primary)
+                                Spacer()
+                                Text(url.deletingLastPathComponent().path
+                                        .replacingOccurrences(of: NSHomeDirectory(), with: "~"))
+                                    .font(.caption2).foregroundStyle(.tertiary)
+                                    .lineLimit(1).truncationMode(.head).frame(maxWidth: 140, alignment: .trailing)
+                            }
+                            .padding(.horizontal, 6).padding(.vertical, 2).contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxHeight: 110)
+        }
+        .padding(.horizontal, 12).padding(.vertical, 10)
+        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    // MARK: - Ergebnisse
+
+    @ViewBuilder
+    private var resultsView: some View {
         VStack(spacing: 8) {
             HStack(spacing: 16) {
-                Label(
-                    String(format: String(localized: "status.success", bundle: .module), successCount),
-                    systemImage: "checkmark.circle.fill"
-                )
-                .foregroundStyle(.green)
-
+                Label(String(format: String(localized: "status.success", bundle: .module), successCount),
+                      systemImage: "checkmark.circle.fill").foregroundStyle(.green)
                 if skippedCount > 0 {
-                    Label(
-                        String(format: String(localized: "status.skipped", bundle: .module), skippedCount),
-                        systemImage: "forward.circle.fill"
-                    )
-                    .foregroundStyle(.secondary)
+                    Label(String(format: String(localized: "status.skipped", bundle: .module), skippedCount),
+                          systemImage: "forward.circle.fill").foregroundStyle(.secondary)
                 }
-
                 if errorCount > 0 {
-                    Label(
-                        String(format: String(localized: "status.errors", bundle: .module), errorCount),
-                        systemImage: "xmark.circle.fill"
-                    )
-                    .foregroundStyle(.red)
+                    Label(String(format: String(localized: "status.errors", bundle: .module), errorCount),
+                          systemImage: "xmark.circle.fill").foregroundStyle(.red)
                 }
             }
             .font(.callout.bold())
 
-            // Ergebnisliste: alle Dateien anklickbar
             ScrollView {
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: 2) {
                     ForEach(Array(converter.results.enumerated()), id: \.offset) { _, r in
                         ResultRow(result: r)
                     }
@@ -413,54 +419,73 @@ public struct ContentView: View {
             }
             .frame(maxHeight: 140)
 
-            // Im Finder zeigen Button
             if !sourceRoots.isEmpty {
-                HStack {
-                    ForEach(sourceRoots.prefix(2), id: \.path) { root in
-                        Button {
-                            NSWorkspace.shared.activateFileViewerSelecting([root])
-                        } label: {
-                            Label(String(localized: "button.show_finder", bundle: .module), systemImage: "folder")
-                                .font(.caption)
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                    }
+                Button {
+                    NSWorkspace.shared.activateFileViewerSelecting(sourceRoots)
+                } label: {
+                    Label(String(localized: "button.show_finder", bundle: .module), systemImage: "folder")
+                        .font(.caption)
                 }
+                .buttonStyle(.bordered).controlSize(.small)
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 12).padding(.vertical, 10)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
     }
 
-    // Einzeldateien wählen — direkt konvertierbar, kein Scan nötig
-    private func pickFiles() {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = false
-        panel.allowsMultipleSelection = true
-        panel.allowedContentTypes = [.init(filenameExtension: "indd")!]
-        if panel.runModal() == .OK {
-            setRootsAndFiles(files: panel.urls, roots: panel.urls)
+    // MARK: - Aktionsbuttons
+
+    @ViewBuilder
+    private var actionButtons: some View {
+        VStack(spacing: 8) {
+            if !sourceRoots.isEmpty && !converter.isSearching && foundFiles.isEmpty && converter.results.isEmpty {
+                Button("Scan starten") { startScan() }
+                    .buttonStyle(.borderedProminent).controlSize(.large)
+            }
+            if converter.isSearching {
+                Button("Abbrechen") { cancelScan() }
+                    .buttonStyle(.bordered).controlSize(.regular).foregroundStyle(.red)
+            }
+            if !foundFiles.isEmpty && !converter.isRunning && !converter.isSearching && converter.results.isEmpty {
+                HStack(spacing: 10) {
+                    Button(String(localized: "button.start", bundle: .module)) {
+                        errorMessage = nil
+                        Task { await converter.convert(files: foundFiles) }
+                    }
+                    .buttonStyle(.borderedProminent).controlSize(.large)
+                    .disabled(!inDesignInstalled)
+
+                    Button("Neu scannen") { resetToRoots() }
+                        .buttonStyle(.bordered).controlSize(.regular)
+                }
+            }
+            if !converter.results.isEmpty && !converter.isRunning {
+                Button(String(localized: "button.reset", bundle: .module)) { fullReset() }
+                    .buttonStyle(.bordered).controlSize(.regular)
+            }
         }
     }
 
-    // Ordner wählen — nur Root merken, Scan muss manuell gestartet werden
+    // MARK: - Picker & Drop
+
+    private func pickFiles() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true; panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = true
+        panel.allowedContentTypes = [.init(filenameExtension: "indd")!]
+        if panel.runModal() == .OK { addRoots(panel.urls, asFiles: true) }
+    }
+
     private func pickFolder() {
         let panel = NSOpenPanel()
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
+        panel.canChooseFiles = false; panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
-        if panel.runModal() == .OK, let url = panel.url {
-            setRootsOnly(roots: [url])
-        }
+        if panel.runModal() == .OK, let url = panel.url { addRoots([url], asFiles: false) }
     }
 
     private func handleDrop(_ providers: [NSItemProvider]) -> Bool {
         Task {
-            var fileRoots: [URL] = []
-            var dirRoots: [URL] = []
+            var dirs: [URL] = []; var files: [URL] = []
             for provider in providers {
                 guard let data = await withCheckedContinuation({ cont in
                     provider.loadItem(forTypeIdentifier: "public.file-url", options: nil) { item, _ in
@@ -470,56 +495,41 @@ public struct ContentView: View {
 
                 var isDir: ObjCBool = false
                 FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir)
-
-                if isDir.boolValue {
-                    dirRoots.append(url)
-                } else if url.pathExtension.lowercased() == "indd" {
-                    fileRoots.append(url)
-                }
+                if isDir.boolValue { dirs.append(url) }
+                else if url.pathExtension.lowercased() == "indd" { files.append(url) }
             }
-
-            if !fileRoots.isEmpty && dirRoots.isEmpty {
-                // Nur Einzeldateien: direkt laden
-                setRootsAndFiles(files: fileRoots, roots: fileRoots)
-            } else if !dirRoots.isEmpty {
-                // Ordner: nur merken, Scan manuell starten
-                setRootsOnly(roots: dirRoots + fileRoots)
-            } else {
-                errorMessage = "Keine .indd Dateien oder Ordner erkannt."
-            }
+            // Neue Roots zur bestehenden Liste hinzufügen (nicht ersetzen)
+            let newRoots = dirs + files
+            if newRoots.isEmpty { errorMessage = "Keine .indd Dateien oder Ordner erkannt."; return }
+            addRoots(newRoots, asFiles: files.isEmpty ? false : dirs.isEmpty)
         }
         return true
     }
 
-    private func setRootsOnly(roots: [URL]) {
-        cancelScan()
-        sourceRoots = roots
+    private func addRoots(_ urls: [URL], asFiles: Bool) {
+        // Deduplizieren
+        let existing = Set(sourceRoots.map(\.path))
+        let fresh = urls.filter { !existing.contains($0.path) }
+        sourceRoots.append(contentsOf: fresh)
         foundFiles = []
         converter.results = []
         converter.progress = 0
         errorMessage = nil
-    }
-
-    private func setRootsAndFiles(files: [URL], roots: [URL]) {
-        cancelScan()
-        sourceRoots = roots
-        foundFiles = files
-        converter.results = []
-        converter.progress = 0
-        errorMessage = nil
+        // Einzelne .indd Dateien direkt laden
+        if asFiles {
+            foundFiles = sourceRoots.filter { $0.pathExtension.lowercased() == "indd" }
+        }
     }
 
     private func startScan() {
-        foundFiles = []
-        errorMessage = nil
+        foundFiles = []; errorMessage = nil
         scanTask = Task {
             var all: [URL] = []
             for root in sourceRoots {
                 var isDir: ObjCBool = false
                 FileManager.default.fileExists(atPath: root.path, isDirectory: &isDir)
                 if isDir.boolValue {
-                    let found = await converter.findInddFilesAsync(in: root)
-                    all.append(contentsOf: found)
+                    all.append(contentsOf: await converter.findInddFilesAsync(in: root))
                 } else if root.pathExtension.lowercased() == "indd" {
                     all.append(root)
                 }
@@ -531,25 +541,17 @@ public struct ContentView: View {
     }
 
     private func cancelScan() {
-        scanTask?.cancel()
-        scanTask = nil
+        scanTask?.cancel(); scanTask = nil
         converter.isSearching = false
     }
 
     private func resetToRoots() {
-        foundFiles = []
-        converter.results = []
-        converter.progress = 0
-        errorMessage = nil
+        foundFiles = []; converter.results = []; converter.progress = 0; errorMessage = nil
     }
 
     private func fullReset() {
-        cancelScan()
-        sourceRoots = []
-        foundFiles = []
-        converter.results = []
-        converter.progress = 0
-        errorMessage = nil
+        cancelScan(); sourceRoots = []; foundFiles = []
+        converter.results = []; converter.progress = 0; errorMessage = nil
     }
 
     private func formatBytes(_ bytes: Int64) -> String {
