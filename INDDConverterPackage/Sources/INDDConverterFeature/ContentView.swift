@@ -146,12 +146,26 @@ public struct ContentView: View {
 
                 // Suchfortschritt
                 if converter.isSearching {
-                    HStack(spacing: 8) {
-                        ProgressView().controlSize(.small)
-                        Text("\(converter.searchCount) .indd Dateien gefunden …")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 8) {
+                            ProgressView().controlSize(.small)
+                            Text(converter.searchCount == 0
+                                 ? "Suche läuft …"
+                                 : "\(converter.searchCount) .indd \(converter.searchCount == 1 ? "Datei" : "Dateien") gefunden")
+                                .font(.callout.bold())
+                        }
+                        if !converter.currentSearchPath.isEmpty {
+                            Text(converter.currentSearchPath)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
                     }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
                 }
 
                 // Status-Bereich
@@ -159,6 +173,33 @@ public struct ContentView: View {
                     VStack(spacing: 14) {
                         if converter.results.isEmpty && !converter.isRunning {
                             fileCountBadge
+                            // Dateiliste vor der Konvertierung
+                            if !foundFiles.isEmpty {
+                                ScrollView {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        ForEach(Array(foundFiles.enumerated()), id: \.offset) { _, url in
+                                            Button {
+                                                NSWorkspace.shared.activateFileViewerSelecting([url])
+                                            } label: {
+                                                HStack(spacing: 5) {
+                                                    Image(systemName: "doc").font(.caption2).foregroundStyle(.secondary)
+                                                    Text(url.lastPathComponent).font(.caption).lineLimit(1).truncationMode(.middle).foregroundStyle(.primary)
+                                                    Spacer()
+                                                    Text(url.deletingLastPathComponent().path.replacingOccurrences(of: NSHomeDirectory(), with: "~"))
+                                                        .font(.caption2).foregroundStyle(.tertiary).lineLimit(1).truncationMode(.head)
+                                                        .frame(maxWidth: 130, alignment: .trailing)
+                                                }
+                                                .padding(.horizontal, 6).padding(.vertical, 2).contentShape(Rectangle())
+                                            }
+                                            .buttonStyle(.plain)
+                                        }
+                                    }
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                                .frame(maxHeight: 120)
+                                .padding(6)
+                                .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
+                            }
                         }
 
                         if converter.isRunning {

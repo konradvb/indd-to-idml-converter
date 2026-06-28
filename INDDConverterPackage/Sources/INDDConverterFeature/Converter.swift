@@ -61,6 +61,9 @@ public class Converter: ObservableObject {
                 if isDir.boolValue {
                     if Converter.skippedDirectoryNames.contains(url.lastPathComponent) {
                         enumerator.skipDescendants()
+                    } else {
+                        let dirPath = url.path.replacingOccurrences(of: NSHomeDirectory(), with: "~")
+                        await MainActor.run { self.currentSearchPath = dirPath }
                     }
                     continue
                 }
@@ -77,6 +80,7 @@ public class Converter: ObservableObject {
 
     @Published public var isSearching = false
     @Published public var searchCount = 0
+    @Published public var currentSearchPath = ""
 
     public func convert(files: [URL]) async {
         isRunning = true
