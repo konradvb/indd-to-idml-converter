@@ -53,6 +53,7 @@ public class Converter: ObservableObject {
         scanBytesPerSecond = 0
         peakRemainingSeconds = 0
         volumeTotalBytes = 0
+        liveFoundFiles = []
         scanStartTime = Date()
 
         // Gesamtkapazität aller Roots vorab summieren
@@ -96,80 +97,81 @@ public class Converter: ObservableObject {
         return result
     }
 
-    // Scan via /usr/bin/find — läuft als eigener Prozess, komplett immun gegen TCC-Crashes
+    // Scan auf GCD-Thread mit FileManager — robust dank autoreleasepool + errorHandler
     private nonisolated func _scanFolderGCD(_ folderURL: URL, startTime: Date) -> [URL] {
-        var skipPaths = Converter.skippedRootPaths
         let home = NSHomeDirectory()
-        // Nutzer-spezifische Ausschlüsse
-        for name in Converter.skippedDirectoryNames {
-            skipPaths.insert("\(home)/\(name)")
-        }
 
-        // find-Argumente: ( -path P1 -o -path P2 ... ) -prune -o -iname *.indd -print
-        var args = [folderURL.path, "("]
-        let sortedSkip = skipPaths.sorted()
-        for (i, p) in sortedSkip.enumerated() {
-            args += ["-path", p]
-            if i < sortedSkip.count - 1 { args.append("-o") }
-        }
-        args += [")", "-prune", "-o", "-iname", "*.indd", "-print"]
-
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/find")
-        process.arguments = args
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = Pipe()
+        guard let enumerator = FileManager.default.enumerator(
+            at: folderURL,
+            includingPropertiesForKeys: [.isDirectoryKey, .fileSizeKey],
+            options: [.skipsHiddenFiles],
+            errorHandler: { _, _ in true }  // Zugriffsfehler ignorieren, nicht crashen
+        ) else { return [] }
 
         var found: [URL] = []
-        var buffer = Data()
+        var pendingBytes: Int64 = 0
+        var pendingPath = ""
         var lastUIUpdate = Date()
+        var done = false
 
-        do { try process.run() } catch { return [] }
+        while !done {
+            // autoreleasepool schützt vor ObjC-Exceptions beim TCC-Dialog-Resume
+            autoreleasepool {
+                guard let url = enumerator.nextObject() as? URL else {
+                    done = true
+                    return
+                }
 
-        // Output laufend lesen (non-blocking)
-        let handle = pipe.fileHandleForReading
-        while process.isRunning {
-            let chunk = handle.availableData
-            if chunk.isEmpty { Thread.sleep(forTimeInterval: 0.05); continue }
-            buffer.append(chunk)
-            let (paths, remaining) = extractLines(from: buffer)
-            buffer = remaining
-            if !paths.isEmpty {
-                found.append(contentsOf: paths.map { URL(fileURLWithPath: $0) })
-                let count = found.count
-                let now = Date()
-                if now.timeIntervalSince(lastUIUpdate) >= 0.3 {
-                    lastUIUpdate = now
-                    DispatchQueue.main.async {
-                        self.searchCount = count
-                        let elapsed = Date().timeIntervalSince(startTime)
-                        if elapsed > 1 { self.scanBytesPerSecond = Double(count) / elapsed }
-                        if !paths.isEmpty {
-                            self.currentSearchPath = URL(fileURLWithPath: paths.last!)
-                                .deletingLastPathComponent().path
-                                .replacingOccurrences(of: home, with: "~")
-                        }
+                var isDir: ObjCBool = false
+                FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir)
+
+                if isDir.boolValue {
+                    let p = url.path
+                    if Converter.skippedRootPaths.contains(p) ||
+                       Converter.skippedDirectoryNames.contains(url.lastPathComponent) {
+                        enumerator.skipDescendants()
+                    } else {
+                        pendingPath = p.replacingOccurrences(of: home, with: "~")
                     }
+                    return
+                }
+
+                let fileSize = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize)
+                    .flatMap { Int64($0) } ?? 0
+                pendingBytes += fileSize
+
+                if url.pathExtension.lowercased() == "indd" {
+                    found.append(url)
+                }
+            }
+
+            // UI alle 0.3s bündeln
+            let now = Date()
+            if now.timeIntervalSince(lastUIUpdate) >= 0.3 {
+                lastUIUpdate = now
+                let bytes = pendingBytes
+                let count = found.count
+                let path = pendingPath
+                let snapshot = Array(found)
+                pendingBytes = 0
+                DispatchQueue.main.async {
+                    self.scannedBytes += bytes
+                    self.searchCount = count
+                    self.liveFoundFiles = snapshot
+                    if !path.isEmpty { self.currentSearchPath = path }
+                    let elapsed = Date().timeIntervalSince(startTime)
+                    if elapsed > 1 { self.scanBytesPerSecond = Double(self.scannedBytes) / elapsed }
                 }
             }
         }
-        // Verbleibende Daten nach Prozessende lesen
-        let rest = handle.readDataToEndOfFile()
-        buffer.append(rest)
-        let (lastPaths, _) = extractLines(from: buffer)
-        found.append(contentsOf: lastPaths.map { URL(fileURLWithPath: $0) })
-        let finalCount = found.count
-        DispatchQueue.main.async { self.searchCount = finalCount }
-        return found
-    }
 
-    private nonisolated func extractLines(from data: Data) -> ([String], Data) {
-        guard let str = String(data: data, encoding: .utf8) else { return ([], data) }
-        var lines = str.components(separatedBy: "\n")
-        let remaining = lines.removeLast() // letztes Element ist unvollständig (kein \n)
-        let paths = lines.filter { !$0.isEmpty }
-        return (paths, Data((remaining).utf8))
+        // Rest flushen
+        let finalBytes = pendingBytes; let finalCount = found.count
+        DispatchQueue.main.async {
+            self.scannedBytes += finalBytes
+            self.searchCount = finalCount
+        }
+        return found
     }
 
     @Published public var isSearching = false
@@ -179,6 +181,7 @@ public class Converter: ObservableObject {
     @Published public var volumeTotalBytes: Int64 = 0
     @Published public var scanBytesPerSecond: Double = 0
     @Published public var peakRemainingSeconds: Double = 0
+    @Published public var liveFoundFiles: [URL] = []
     public var scanStartTime: Date = Date()
 
     public func convert(files: [URL]) async {
