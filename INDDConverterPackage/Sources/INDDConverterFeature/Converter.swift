@@ -96,71 +96,92 @@ public class Converter: ObservableObject {
         return result
     }
 
-    // Scan läuft synchron auf GCD-Thread — robust gegen TCC-Unterbrechungen
+    // Scan via /usr/bin/find — läuft als eigener Prozess, komplett immun gegen TCC-Crashes
     private nonisolated func _scanFolderGCD(_ folderURL: URL, startTime: Date) -> [URL] {
-        // errorHandler: Fehler (z.B. Zugriff verweigert) ignorieren statt crashen
-        guard let enumerator = FileManager.default.enumerator(
-            at: folderURL,
-            includingPropertiesForKeys: [.isRegularFileKey, .isDirectoryKey, .fileSizeKey],
-            options: [.skipsHiddenFiles],
-            errorHandler: { _, _ in return true }
-        ) else { return [] }
+        var skipPaths = Converter.skippedRootPaths
+        let home = NSHomeDirectory()
+        // Nutzer-spezifische Ausschlüsse
+        for name in Converter.skippedDirectoryNames {
+            skipPaths.insert("\(home)/\(name)")
+        }
+
+        // find-Argumente bauen
+        var args = [folderURL.path]
+        // Ausgeschlossene Verzeichnisse als -path X -prune -o Kette
+        var pruneArgs: [String] = []
+        for p in skipPaths.sorted() {
+            pruneArgs += ["-path", p]
+        }
+        if !pruneArgs.isEmpty {
+            args += ["("] + interleave(pruneArgs, with: "-o") + [")", "-prune", "-o"]
+        }
+        args += ["-iname", "*.indd", "-print"]
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/find")
+        process.arguments = args
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = Pipe() // Fehler verwerfen
 
         var found: [URL] = []
-        var pendingBytes: Int64 = 0
-        var pendingCount = 0
+        var buffer = Data()
         var lastUIUpdate = Date()
 
-        while let obj = enumerator.nextObject() {
-            guard let url = obj as? URL else { continue }
+        process.launch()
 
-            var isDir: ObjCBool = false
-            FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir)
-            if isDir.boolValue {
-                let p = url.path
-                if Converter.skippedRootPaths.contains(p) || Converter.skippedDirectoryNames.contains(url.lastPathComponent) {
-                    enumerator.skipDescendants()
-                } else {
-                    let display = p.replacingOccurrences(of: NSHomeDirectory(), with: "~")
-                    DispatchQueue.main.async { self.currentSearchPath = display }
+        // Output laufend lesen (non-blocking)
+        let handle = pipe.fileHandleForReading
+        while process.isRunning {
+            let chunk = handle.availableData
+            if chunk.isEmpty { Thread.sleep(forTimeInterval: 0.05); continue }
+            buffer.append(chunk)
+            let (paths, remaining) = extractLines(from: buffer)
+            buffer = remaining
+            if !paths.isEmpty {
+                found.append(contentsOf: paths.map { URL(fileURLWithPath: $0) })
+                let count = found.count
+                let now = Date()
+                if now.timeIntervalSince(lastUIUpdate) >= 0.3 {
+                    lastUIUpdate = now
+                    DispatchQueue.main.async {
+                        self.searchCount = count
+                        let elapsed = Date().timeIntervalSince(startTime)
+                        if elapsed > 1 { self.scanBytesPerSecond = Double(count) / elapsed }
+                        if !paths.isEmpty {
+                            self.currentSearchPath = URL(fileURLWithPath: paths.last!)
+                                .deletingLastPathComponent().path
+                                .replacingOccurrences(of: home, with: "~")
+                        }
+                    }
                 }
-                continue
-            }
-
-            let fileSize = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize).flatMap { Int64($0) } ?? 0
-            pendingBytes += fileSize
-            if url.pathExtension.lowercased() == "indd" {
-                found.append(url)
-                pendingCount = found.count
-            }
-
-            // UI nur alle 0.3s updaten — sonst bremst DispatchQueue.main.async den Scan aus
-            let now = Date()
-            if now.timeIntervalSince(lastUIUpdate) >= 0.3 {
-                lastUIUpdate = now
-                let bytes = pendingBytes
-                let count = pendingCount
-                let startTime = startTime
-                DispatchQueue.main.async {
-                    self.scannedBytes += bytes
-                    self.searchCount = count
-                    let elapsed = Date().timeIntervalSince(startTime)
-                    if elapsed > 1 { self.scanBytesPerSecond = Double(self.scannedBytes) / elapsed }
-                }
-                pendingBytes = 0
             }
         }
-        // Rest-Update
-        if pendingBytes > 0 {
-            let bytes = pendingBytes; let count = pendingCount
-            DispatchQueue.main.async {
-                self.scannedBytes += bytes
-                self.searchCount = count
-                let elapsed = Date().timeIntervalSince(startTime)
-                if elapsed > 1 { self.scanBytesPerSecond = Double(self.scannedBytes) / elapsed }
-            }
-        }
+        // Verbleibende Daten nach Prozessende lesen
+        let rest = handle.readDataToEndOfFile()
+        buffer.append(rest)
+        let (lastPaths, _) = extractLines(from: buffer)
+        found.append(contentsOf: lastPaths.map { URL(fileURLWithPath: $0) })
+        let finalCount = found.count
+        DispatchQueue.main.async { self.searchCount = finalCount }
         return found
+    }
+
+    private nonisolated func interleave(_ items: [String], with separator: String) -> [String] {
+        var result: [String] = []
+        for (i, item) in items.enumerated() {
+            result.append(item)
+            if i < items.count - 1 { result.append(separator) }
+        }
+        return result
+    }
+
+    private nonisolated func extractLines(from data: Data) -> ([String], Data) {
+        guard let str = String(data: data, encoding: .utf8) else { return ([], data) }
+        var lines = str.components(separatedBy: "\n")
+        let remaining = lines.removeLast() // letztes Element ist unvollständig (kein \n)
+        let paths = lines.filter { !$0.isEmpty }
+        return (paths, Data((remaining).utf8))
     }
 
     @Published public var isSearching = false
