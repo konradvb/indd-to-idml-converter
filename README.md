@@ -1,87 +1,82 @@
 # INDD → IDML Converter
 
-Konvertiert Adobe InDesign-Dateien (`.indd`) in das offene IDML-Format (`.idml`) — damit du deine Dateien in **Affinity Publisher**, QuarkXPress oder anderen Programmen öffnen kannst, ohne auf Adobe angewiesen zu sein.
+Converts Adobe InDesign files (`.indd`) to the open IDML format (`.idml`) — so you can open your designs in **Affinity Publisher**, QuarkXPress, or other applications without depending on Adobe.
+
+Available in English and German, automatically matching your system language.
 
 ## Download
 
-**[INDD-IDML-Converter-v1.0.zip](https://github.com/konradvb/indd-to-idml-converter/releases/tag/v1.0)** — macOS App, ca. 100 KB
+**[INDD-IDML-Converter-v1.0.zip](https://github.com/konradvb/indd-to-idml-converter/releases/tag/v1.0)** — macOS App, ~100 KB
 
-## Was die App macht
+## What it does
 
-- Ordner per Drag & Drop oder Ordner-Auswahl-Button hinzufügen
-- Alle `.indd` Dateien im Ordner werden automatisch gefunden
-- Per Klick auf „Konvertieren starten" wird jede Datei als `.idml` daneben gespeichert
-- Fortschrittsbalken und Ergebnisanzeige (erfolgreich / Fehler)
-- Die Originaldateien (`.indd`) bleiben unberührt
+- Drop a folder onto the app or use the folder picker
+- All `.indd` files inside are found automatically (including subfolders)
+- Click "Start Conversion" — each file is exported as `.idml` next to the original
+- Progress bar shows current file; results show how many succeeded or failed
+- Original `.indd` files are never touched
 
-## Voraussetzungen
+## Requirements
 
-- macOS 13 oder neuer
-- **Adobe InDesign muss installiert sein** — die App steuert InDesign im Hintergrund automatisch. InDesign öffnet jede Datei, exportiert sie als IDML und schließt sie wieder.
+- macOS 13 or later
+- **Adobe InDesign must be installed** — the app drives InDesign in the background. InDesign opens each file, exports it as IDML, and closes it again.
 
 ## Installation
 
-1. ZIP herunterladen und entpacken
-2. `INDDConverter.app` in den Programme-Ordner ziehen (optional)
-3. **Beim ersten Start:** Rechtsklick auf die App → „Öffnen" → Im Dialog „Öffnen" bestätigen
+1. Download and unzip the file
+2. Move `INDDConverter.app` to your Applications folder (optional)
+3. **First launch only:** Right-click the app → "Open" → confirm in the dialog
 
-Der Rechtsklick-Schritt ist einmalig nötig, weil die App kein Apple-Zertifikat hat. Danach startet sie normal per Doppelklick.
+The right-click step is a one-time requirement because the app is not notarized. After that, it launches normally with a double-click.
 
-## Verwendung
+## Known Limitations
 
-1. App starten
-2. Einen Ordner mit `.indd` Dateien auf die Drop-Zone ziehen — oder „Ordner wählen" klicken
-3. Die Anzahl gefundener Dateien wird angezeigt
-4. „Konvertieren starten" klicken
-5. Die `.idml` Dateien liegen danach im gleichen Ordner wie die Originale
+**Missing fonts:** InDesign still exports even if fonts are missing, replacing them with substitutes. Affinity Publisher will show yellow warnings — fonts can be reassigned there.
 
-## Bekannte Einschränkungen
+**Linked images:** IDML contains only the layout, not the images themselves. If linked image files are no longer at their original path, image frames will appear empty in Affinity and need to be re-linked.
 
-**Fehlende Schriften:** InDesign exportiert trotzdem, ersetzt fehlende Schriften durch Platzhalter. In Affinity Publisher erscheinen gelbe Warnungen — Schriften können dort neu zugewiesen werden.
+**Cloud-sandboxed files:** Files inside locked app containers (e.g. Scanbot's iCloud container) cannot be copied directly. Move them to a regular folder first.
 
-**Verknüpfte Bilder:** IDML enthält nur das Layout, nicht die Bilder selbst. Wenn die verlinkten Bilddateien nicht mehr am selben Ort liegen, sind Bildrahmen in Affinity leer und müssen neu verknüpft werden.
+## Command-Line Alternative
 
-**Cloud-Dateien:** Dateien die sich in gesperrten App-Containern befinden (z.B. Scanbot iCloud) können nicht direkt kopiert werden. Diese Dateien zuerst in einen normalen Ordner verschieben.
-
-## Für Entwickler
-
-Das Projekt ist eine native macOS SwiftUI App, aufgebaut mit einem Workspace + Swift Package Manager:
-
-```
-INDDConverter.xcworkspace      ← In Xcode öffnen
-INDDConverter/                 ← App-Shell (Entry Point, Assets)
-INDDConverterPackage/
-  Sources/INDDConverterFeature/
-    ContentView.swift           ← UI
-    Converter.swift             ← AppleScript-Logik
-convert_indd_to_idml.applescript  ← Standalone Script (kein Xcode nötig)
-find_indd_files.sh                ← Hilfsskript für die Dateiliste
-```
-
-### Standalone Script (ohne App)
-
-Alternativ zur App können die AppleScript- und Shell-Dateien direkt verwendet werden:
+The included shell script and AppleScript can be used without the app:
 
 ```bash
-# 1. Alle .indd Dateien im Home-Ordner finden
+# 1. Find all .indd files in a folder
 ./find_indd_files.sh ~/Documents /tmp/indd_files.txt
 
-# 2. Konvertierung starten (InDesign muss installiert sein)
+# 2. Run the conversion (InDesign must be installed)
 osascript convert_indd_to_idml.applescript
 ```
 
-Die Pfade in `convert_indd_to_idml.applescript` oben anpassen (`fileListPath` und `logPath`).
+Adjust `fileListPath` and `logPath` at the top of the AppleScript to match your setup.
 
-### Projekt bauen
+## For Developers
+
+Native macOS SwiftUI app using a Workspace + Swift Package Manager structure:
+
+```
+INDDConverter.xcworkspace                         ← Open in Xcode
+INDDConverter/                                    ← App shell (entry point, assets)
+INDDConverterPackage/
+  Sources/INDDConverterFeature/
+    ContentView.swift                             ← UI
+    Converter.swift                               ← AppleScript logic
+    Resources/
+      de.lproj/Localizable.strings               ← German strings
+      en.lproj/Localizable.strings               ← English strings
+convert_indd_to_idml.applescript                  ← Standalone script
+find_indd_files.sh                                ← Helper to build file list
+```
+
+### Build
 
 ```bash
-# In Xcode öffnen
 open INDDConverter.xcworkspace
-
-# Oder per Terminal
+# or
 xcodebuild -workspace INDDConverter.xcworkspace -scheme INDDConverter -configuration Release build
 ```
 
-## Lizenz
+## License
 
 MIT
