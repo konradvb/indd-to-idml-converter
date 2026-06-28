@@ -1,133 +1,87 @@
 # INDD → IDML Converter
 
-**[Download v1.0](https://github.com/konradvb/indd-to-idml-converter/releases/tag/v1.0)** — macOS App zum Konvertieren von Adobe InDesign (.indd) Dateien in das offene IDML-Format (kompatibel mit Affinity Publisher).
+Konvertiert Adobe InDesign-Dateien (`.indd`) in das offene IDML-Format (`.idml`) — damit du deine Dateien in **Affinity Publisher**, QuarkXPress oder anderen Programmen öffnen kannst, ohne auf Adobe angewiesen zu sein.
 
-Ordner per Drag & Drop auf die App ziehen → alle .indd Dateien werden automatisch als .idml daneben gespeichert. Erfordert Adobe InDesign.
+## Download
 
----
+**[INDD-IDML-Converter-v1.0.zip](https://github.com/konradvb/indd-to-idml-converter/releases/tag/v1.0)** — macOS App, ca. 100 KB
 
-## Project Architecture
+## Was die App macht
+
+- Ordner per Drag & Drop oder Ordner-Auswahl-Button hinzufügen
+- Alle `.indd` Dateien im Ordner werden automatisch gefunden
+- Per Klick auf „Konvertieren starten" wird jede Datei als `.idml` daneben gespeichert
+- Fortschrittsbalken und Ergebnisanzeige (erfolgreich / Fehler)
+- Die Originaldateien (`.indd`) bleiben unberührt
+
+## Voraussetzungen
+
+- macOS 13 oder neuer
+- **Adobe InDesign muss installiert sein** — die App steuert InDesign im Hintergrund automatisch. InDesign öffnet jede Datei, exportiert sie als IDML und schließt sie wieder.
+
+## Installation
+
+1. ZIP herunterladen und entpacken
+2. `INDDConverter.app` in den Programme-Ordner ziehen (optional)
+3. **Beim ersten Start:** Rechtsklick auf die App → „Öffnen" → Im Dialog „Öffnen" bestätigen
+
+Der Rechtsklick-Schritt ist einmalig nötig, weil die App kein Apple-Zertifikat hat. Danach startet sie normal per Doppelklick.
+
+## Verwendung
+
+1. App starten
+2. Einen Ordner mit `.indd` Dateien auf die Drop-Zone ziehen — oder „Ordner wählen" klicken
+3. Die Anzahl gefundener Dateien wird angezeigt
+4. „Konvertieren starten" klicken
+5. Die `.idml` Dateien liegen danach im gleichen Ordner wie die Originale
+
+## Bekannte Einschränkungen
+
+**Fehlende Schriften:** InDesign exportiert trotzdem, ersetzt fehlende Schriften durch Platzhalter. In Affinity Publisher erscheinen gelbe Warnungen — Schriften können dort neu zugewiesen werden.
+
+**Verknüpfte Bilder:** IDML enthält nur das Layout, nicht die Bilder selbst. Wenn die verlinkten Bilddateien nicht mehr am selben Ort liegen, sind Bildrahmen in Affinity leer und müssen neu verknüpft werden.
+
+**Cloud-Dateien:** Dateien die sich in gesperrten App-Containern befinden (z.B. Scanbot iCloud) können nicht direkt kopiert werden. Diese Dateien zuerst in einen normalen Ordner verschieben.
+
+## Für Entwickler
+
+Das Projekt ist eine native macOS SwiftUI App, aufgebaut mit einem Workspace + Swift Package Manager:
 
 ```
-INDDConverter/
-├── INDDConverter.xcworkspace/              # Open this file in Xcode
-├── INDDConverter.xcodeproj/                # App shell project
-├── INDDConverter/                          # App target (minimal)
-│   ├── Assets.xcassets/                # App-level assets (icons, colors)
-│   ├── INDDConverterApp.swift              # App entry point
-│   ├── INDDConverter.entitlements          # App sandbox settings
-│   └── INDDConverter.xctestplan            # Test configuration
-├── INDDConverterPackage/                   # 🚀 Primary development area
-│   ├── Package.swift                   # Package configuration
-│   ├── Sources/INDDConverterFeature/       # Your feature code
-│   └── Tests/INDDConverterFeatureTests/    # Unit tests
-└── INDDConverterUITests/                   # UI automation tests
+INDDConverter.xcworkspace      ← In Xcode öffnen
+INDDConverter/                 ← App-Shell (Entry Point, Assets)
+INDDConverterPackage/
+  Sources/INDDConverterFeature/
+    ContentView.swift           ← UI
+    Converter.swift             ← AppleScript-Logik
+convert_indd_to_idml.applescript  ← Standalone Script (kein Xcode nötig)
+find_indd_files.sh                ← Hilfsskript für die Dateiliste
 ```
 
-## Key Architecture Points
+### Standalone Script (ohne App)
 
-### Workspace + SPM Structure
-- **App Shell**: `INDDConverter/` contains minimal app lifecycle code
-- **Feature Code**: `INDDConverterPackage/Sources/INDDConverterFeature/` is where most development happens
-- **Separation**: Business logic lives in the SPM package, app target just imports and displays it
+Alternativ zur App können die AppleScript- und Shell-Dateien direkt verwendet werden:
 
-### Buildable Folders (Xcode 16)
-- Files added to the filesystem automatically appear in Xcode
-- No need to manually add files to project targets
-- Reduces project file conflicts in teams
+```bash
+# 1. Alle .indd Dateien im Home-Ordner finden
+./find_indd_files.sh ~/Documents /tmp/indd_files.txt
 
-### App Sandbox
-The app is sandboxed by default with basic file access permissions. Modify `INDDConverter.entitlements` to add capabilities as needed.
-
-## Development Notes
-
-### Code Organization
-Most development happens in `INDDConverterPackage/Sources/INDDConverterFeature/` - organize your code as you prefer.
-
-### Public API Requirements
-Types exposed to the app target need `public` access:
-```swift
-public struct SettingsView: View {
-    public init() {}
-    
-    public var body: some View {
-        // Your view code
-    }
-}
+# 2. Konvertierung starten (InDesign muss installiert sein)
+osascript convert_indd_to_idml.applescript
 ```
 
-### Adding Dependencies
-Edit `INDDConverterPackage/Package.swift` to add SPM dependencies:
-```swift
-dependencies: [
-    .package(url: "https://github.com/example/SomePackage", from: "1.0.0")
-],
-targets: [
-    .target(
-        name: "INDDConverterFeature",
-        dependencies: ["SomePackage"]
-    ),
-]
+Die Pfade in `convert_indd_to_idml.applescript` oben anpassen (`fileListPath` und `logPath`).
+
+### Projekt bauen
+
+```bash
+# In Xcode öffnen
+open INDDConverter.xcworkspace
+
+# Oder per Terminal
+xcodebuild -workspace INDDConverter.xcworkspace -scheme INDDConverter -configuration Release build
 ```
 
-### Test Structure
-- **Unit Tests**: `INDDConverterPackage/Tests/INDDConverterFeatureTests/` (Swift Testing framework)
-- **UI Tests**: `INDDConverterUITests/` (XCUITest framework)
-- **Test Plan**: `INDDConverter.xctestplan` coordinates all tests
+## Lizenz
 
-## Configuration
-
-### XCConfig Build Settings
-Build settings are managed through **XCConfig files** in `Config/`:
-- `Config/Shared.xcconfig` - Common settings (bundle ID, versions, deployment target)
-- `Config/Debug.xcconfig` - Debug-specific settings  
-- `Config/Release.xcconfig` - Release-specific settings
-- `Config/Tests.xcconfig` - Test-specific settings
-
-### App Sandbox & Entitlements
-The app is sandboxed by default with basic file access. Edit `INDDConverter/INDDConverter.entitlements` to add capabilities:
-```xml
-<key>com.apple.security.files.user-selected.read-write</key>
-<true/>
-<key>com.apple.security.network.client</key>
-<true/>
-<!-- Add other entitlements as needed -->
-```
-
-## macOS-Specific Features
-
-### Window Management
-Add multiple windows and settings panels:
-```swift
-@main
-struct INDDConverterApp: App {
-    var body: some Scene {
-        WindowGroup {
-            ContentView()
-        }
-        
-        Settings {
-            SettingsView()
-        }
-    }
-}
-```
-
-### Asset Management
-- **App-Level Assets**: `INDDConverter/Assets.xcassets/` (app icon with multiple sizes, accent color)
-- **Feature Assets**: Add `Resources/` folder to SPM package if needed
-
-### SPM Package Resources
-To include assets in your feature package:
-```swift
-.target(
-    name: "INDDConverterFeature",
-    dependencies: [],
-    resources: [.process("Resources")]
-)
-```
-
-## Notes
-
-### Generated with XcodeBuildMCP
-This project was scaffolded using [XcodeBuildMCP](https://github.com/cameroncooke/XcodeBuildMCP), which provides tools for AI-assisted macOS development workflows.
+MIT
