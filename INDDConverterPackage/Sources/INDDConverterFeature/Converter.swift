@@ -44,6 +44,7 @@ public class Converter: ObservableObject {
         searchCount = 0
         scannedBytes = 0
         scanBytesPerSecond = 0
+        peakRemainingSeconds = 0
         scanStartTime = Date()
 
         // Nur bei echtem Volume-Root (z.B. /, /Volumes/Backup) die Festplattenkapazität zeigen
@@ -123,6 +124,7 @@ public class Converter: ObservableObject {
     @Published public var scannedBytes: Int64 = 0
     @Published public var volumeTotalBytes: Int64 = 0
     @Published public var scanBytesPerSecond: Double = 0
+    @Published public var peakRemainingSeconds: Double = 0
     public var scanStartTime: Date = Date()
 
     public func convert(files: [URL]) async {
