@@ -6,7 +6,7 @@ Available in English and German, automatically matching your system language.
 
 ## Download
 
-**[INDD-IDML-Converter-v1.1.zip](https://github.com/konradvb/indd-to-idml-converter/releases/tag/v1.1)** — macOS App, ~130 KB
+**[INDD-IDML-Converter-v1.2.zip](https://github.com/konradvb/indd-to-idml-converter/releases/tag/v1.2)** — macOS App, ~144 KB
 
 ## What it does
 
