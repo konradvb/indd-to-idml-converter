@@ -61,6 +61,7 @@ public struct ContentView: View {
     @State private var sourceRoots: [URL] = []
     @State private var isDragging = false
     @State private var errorMessage: String?
+    @State private var scanTask: Task<Void, Never>?
     private let inDesignInstalled = Converter.inDesignInstalled()
 
     public init() {}
@@ -230,26 +231,43 @@ public struct ContentView: View {
 
                 // Aktionsbuttons
                 VStack(spacing: 10) {
-                    if !foundFiles.isEmpty && !converter.isRunning && converter.results.isEmpty {
-                        Button(String(localized: "button.start", bundle: .module)) {
-                            errorMessage = nil
-                            Task { await converter.convert(files: foundFiles) }
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.large)
-                        .disabled(!inDesignInstalled)
+                    // Scan starten (Roots geladen, noch nicht gescannt)
+                    if !sourceRoots.isEmpty && !converter.isSearching && foundFiles.isEmpty && converter.results.isEmpty {
+                        Button("Scan starten") { startScan() }
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.large)
                     }
 
-                    if !converter.results.isEmpty && !converter.isRunning {
-                        Button(String(localized: "button.reset", bundle: .module)) {
-                            foundFiles = []
-                            sourceRoots = []
-                            converter.results = []
-                            converter.progress = 0
-                            errorMessage = nil
+                    // Scan abbrechen
+                    if converter.isSearching {
+                        Button("Abbrechen") { cancelScan() }
+                            .buttonStyle(.bordered)
+                            .controlSize(.regular)
+                            .foregroundStyle(.red)
+                    }
+
+                    // Konvertierung starten
+                    if !foundFiles.isEmpty && !converter.isRunning && !converter.isSearching && converter.results.isEmpty {
+                        HStack(spacing: 10) {
+                            Button(String(localized: "button.start", bundle: .module)) {
+                                errorMessage = nil
+                                Task { await converter.convert(files: foundFiles) }
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.large)
+                            .disabled(!inDesignInstalled)
+
+                            Button("Neu scannen") { resetToRoots() }
+                                .buttonStyle(.bordered)
+                                .controlSize(.regular)
                         }
-                        .buttonStyle(.bordered)
-                        .controlSize(.regular)
+                    }
+
+                    // Konvertierung abbrechen (falls implementiert) + Reset
+                    if !converter.results.isEmpty && !converter.isRunning {
+                        Button(String(localized: "button.reset", bundle: .module)) { fullReset() }
+                            .buttonStyle(.bordered)
+                            .controlSize(.regular)
                     }
                 }
             }
@@ -359,7 +377,7 @@ public struct ContentView: View {
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
     }
 
-    // Einzeldateien wählen
+    // Einzeldateien wählen — direkt konvertierbar, kein Scan nötig
     private func pickFiles() {
         let panel = NSOpenPanel()
         panel.canChooseFiles = true
@@ -367,33 +385,25 @@ public struct ContentView: View {
         panel.allowsMultipleSelection = true
         panel.allowedContentTypes = [.init(filenameExtension: "indd")!]
         if panel.runModal() == .OK {
-            loadURLs(panel.urls, roots: panel.urls)
+            setRootsAndFiles(files: panel.urls, roots: panel.urls)
         }
     }
 
-    // Ordner wählen
+    // Ordner wählen — nur Root merken, Scan muss manuell gestartet werden
     private func pickFolder() {
         let panel = NSOpenPanel()
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
         if panel.runModal() == .OK, let url = panel.url {
-            sourceRoots = [url]
-            converter.results = []
-            converter.progress = 0
-            errorMessage = nil
-            Task {
-                let files = await converter.findInddFilesAsync(in: url)
-                foundFiles = files
-                if files.isEmpty { errorMessage = "Keine .indd Dateien gefunden." }
-            }
+            setRootsOnly(roots: [url])
         }
     }
 
     private func handleDrop(_ providers: [NSItemProvider]) -> Bool {
         Task {
-            var collected: [URL] = []
-            var roots: [URL] = []
+            var fileRoots: [URL] = []
+            var dirRoots: [URL] = []
             for provider in providers {
                 guard let data = await withCheckedContinuation({ cont in
                     provider.loadItem(forTypeIdentifier: "public.file-url", options: nil) { item, _ in
@@ -405,21 +415,84 @@ public struct ContentView: View {
                 FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir)
 
                 if isDir.boolValue {
-                    roots.append(url)
-                    let found = await converter.findInddFilesAsync(in: url)
-                    collected.append(contentsOf: found)
+                    dirRoots.append(url)
                 } else if url.pathExtension.lowercased() == "indd" {
-                    roots.append(url)
-                    collected.append(url)
+                    fileRoots.append(url)
                 }
             }
-            if collected.isEmpty {
-                errorMessage = "Keine .indd Dateien gefunden."
+
+            if !fileRoots.isEmpty && dirRoots.isEmpty {
+                // Nur Einzeldateien: direkt laden
+                setRootsAndFiles(files: fileRoots, roots: fileRoots)
+            } else if !dirRoots.isEmpty {
+                // Ordner: nur merken, Scan manuell starten
+                setRootsOnly(roots: dirRoots + fileRoots)
             } else {
-                loadURLs(collected, roots: roots)
+                errorMessage = "Keine .indd Dateien oder Ordner erkannt."
             }
         }
         return true
+    }
+
+    private func setRootsOnly(roots: [URL]) {
+        cancelScan()
+        sourceRoots = roots
+        foundFiles = []
+        converter.results = []
+        converter.progress = 0
+        errorMessage = nil
+    }
+
+    private func setRootsAndFiles(files: [URL], roots: [URL]) {
+        cancelScan()
+        sourceRoots = roots
+        foundFiles = files
+        converter.results = []
+        converter.progress = 0
+        errorMessage = nil
+    }
+
+    private func startScan() {
+        foundFiles = []
+        errorMessage = nil
+        scanTask = Task {
+            var all: [URL] = []
+            for root in sourceRoots {
+                var isDir: ObjCBool = false
+                FileManager.default.fileExists(atPath: root.path, isDirectory: &isDir)
+                if isDir.boolValue {
+                    let found = await converter.findInddFilesAsync(in: root)
+                    all.append(contentsOf: found)
+                } else if root.pathExtension.lowercased() == "indd" {
+                    all.append(root)
+                }
+                if Task.isCancelled { return }
+            }
+            foundFiles = all
+            if all.isEmpty { errorMessage = "Keine .indd Dateien gefunden." }
+        }
+    }
+
+    private func cancelScan() {
+        scanTask?.cancel()
+        scanTask = nil
+        converter.isSearching = false
+    }
+
+    private func resetToRoots() {
+        foundFiles = []
+        converter.results = []
+        converter.progress = 0
+        errorMessage = nil
+    }
+
+    private func fullReset() {
+        cancelScan()
+        sourceRoots = []
+        foundFiles = []
+        converter.results = []
+        converter.progress = 0
+        errorMessage = nil
     }
 
     private func formatBytes(_ bytes: Int64) -> String {
@@ -428,13 +501,5 @@ public struct ContentView: View {
         let mb = Double(bytes) / 1_048_576
         if mb >= 1 { return String(format: "%.0f MB", mb) }
         return String(format: "%.0f KB", Double(bytes) / 1024)
-    }
-
-    private func loadURLs(_ urls: [URL], roots: [URL]) {
-        foundFiles = urls
-        sourceRoots = roots
-        converter.results = []
-        converter.progress = 0
-        errorMessage = nil
     }
 }
