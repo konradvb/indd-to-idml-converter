@@ -69,6 +69,7 @@ public struct ContentView: View {
     @State private var listHeight: CGFloat = 200
     @State private var dragStartSource: CGFloat?
     @State private var dragStartList: CGFloat?
+    @State private var dividerHover = false
 
     // Grenzen für die ziehbaren Felder
     private let minSourceH: CGFloat = 60, maxSourceH: CGFloat = 420
@@ -101,18 +102,26 @@ public struct ContentView: View {
             || (!converter.results.isEmpty && !converter.isRunning)
     }
 
-    // Ziehbarer Trenner: verschiebt Höhe zwischen Quellen-Box und Listen-Bereich
+    // Ziehbarer Trenner: verschiebt Höhe zwischen Quellen-Box und Listen-Bereich.
+    // Klarer Griff (3 Punkte) mit Hover-Hervorhebung — eindeutig als „zum Ziehen" erkennbar.
     private var resizeDivider: some View {
-        VStack(spacing: 3) {
-            RoundedRectangle(cornerRadius: 2)
-                .fill(Color.secondary.opacity(0.35))
-                .frame(width: 44, height: 5)
+        HStack(spacing: 4) {
+            ForEach(0..<3, id: \.self) { _ in
+                Circle()
+                    .fill(Color.secondary.opacity(dividerHover ? 0.75 : 0.4))
+                    .frame(width: 4, height: 4)
+            }
         }
+        .padding(.horizontal, 14).padding(.vertical, 5)
+        .background(
+            Capsule().fill(dividerHover ? Color.secondary.opacity(0.12) : Color.clear)
+        )
         .frame(maxWidth: .infinity)
-        .frame(height: 16)
+        .frame(height: 18)
         .contentShape(Rectangle())
         .onHover { inside in
-            if inside { NSCursor.resizeUpDown.push() } else { NSCursor.pop() }
+            dividerHover = inside
+            if inside { NSCursor.resizeUpDown.set() } else { NSCursor.arrow.set() }
         }
         .gesture(
             DragGesture(minimumDistance: 1)
@@ -134,6 +143,7 @@ public struct ContentView: View {
                     dragStartList = nil
                 }
         )
+        .help("Ziehen, um die Felder größer/kleiner zu machen")
     }
 
     public var body: some View {

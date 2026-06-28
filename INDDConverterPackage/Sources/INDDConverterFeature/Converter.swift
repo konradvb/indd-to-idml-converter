@@ -167,14 +167,15 @@ public class Converter: ObservableObject {
                     .flatMap { Int64($0) } ?? 0
                 pendingBytes += fileSize
 
-                if url.pathExtension.lowercased() == "indd" {
+                if url.pathExtension.lowercased() == "indd"
+                    && url.lastPathComponent != "_indd_convert_work.indd" {  // eigene Temp-Datei ignorieren
                     allFound.append(url)
                 }
             }
 
-            // UI alle 0.3s bündeln — kumulative Werte melden
+            // UI nur alle 0.5s bündeln — weniger Re-Renders, ruhigeres Bild beim Fenster-/Trenner-Ziehen
             let now = Date()
-            if now.timeIntervalSince(lastUIUpdate) >= 0.3 {
+            if now.timeIntervalSince(lastUIUpdate) >= 0.5 {
                 lastUIUpdate = now
                 totalBytes += pendingBytes
                 pendingBytes = 0
