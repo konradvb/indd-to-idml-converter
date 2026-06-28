@@ -70,16 +70,20 @@ public struct ContentView: View {
         guard converter.volumeTotalBytes > 0,
               converter.scannedBytes > 0 else { return nil }
         let progress = Double(converter.scannedBytes) / Double(converter.volumeTotalBytes)
-        guard progress > 0.005 else { return nil } // erst ab 0.5% sinnvoll
+        guard progress > 0.003 else { return nil }
         let elapsed = Date().timeIntervalSince(converter.scanStartTime)
-        // Hochrechnung: wie lange dauert alles, wenn wir linear weitermachen?
-        // + 60% Puffer damit die Anzeige eher zu lang ist als zu kurz
-        let totalEstimated = (elapsed / progress) * 1.6
-        let remaining = totalEstimated - elapsed
+        let totalEstimated = (elapsed / progress) * 1.7  // 70% Puffer
+        let currentRemaining = totalEstimated - elapsed
+
+        // Peak aktualisieren: ETA darf nur sinken, nie steigen
+        if currentRemaining > converter.peakRemainingSeconds {
+            converter.peakRemainingSeconds = currentRemaining
+        }
+        let remaining = converter.peakRemainingSeconds
         if remaining < 10 { return nil }
-        if remaining < 90 { return "\(Int(remaining / 10) * 10) Sek." }
+        if remaining < 90 { return "\(Int((remaining / 10).rounded(.up)) * 10) Sek." }
         if remaining < 3600 { return "\(Int(remaining / 60) + 1) Min." }
-        return String(format: "%.1f Std.", remaining / 3600)
+        return String(format: "%.0f Std. %d Min.", floor(remaining / 3600), Int((remaining.truncatingRemainder(dividingBy: 3600)) / 60) + 1)
     }
 
     var successCount: Int { converter.results.filter { $0.success && $0.error == nil }.count }
