@@ -62,84 +62,105 @@ public class Converter: ObservableObject {
                 let cap = (try? root.resourceValues(forKeys: [.volumeTotalCapacityKey]).volumeTotalCapacity).flatMap { Int64($0) } ?? 0
                 volumeTotalBytes += cap
             } else {
-                Task.detached(priority: .background) { [root] in
-                    let process = Process()
-                    process.executableURL = URL(fileURLWithPath: "/usr/bin/du")
-                    process.arguments = ["-sk", root.path]
-                    let pipe = Pipe(); process.standardOutput = pipe
-                    try? process.run(); process.waitUntilExit()
+                // du im Hintergrund — blockiert den Scan nicht
+                let rootPath = root.path
+                DispatchQueue.global(qos: .background).async {
+                    let p = Process()
+                    p.executableURL = URL(fileURLWithPath: "/usr/bin/du")
+                    p.arguments = ["-sk", rootPath]
+                    let pipe = Pipe(); p.standardOutput = pipe
+                    try? p.run(); p.waitUntilExit()
                     let out = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
                     if let kb = Int64(out.split(separator: "\t").first?.trimmingCharacters(in: .whitespaces) ?? "") {
-                        await MainActor.run { self.volumeTotalBytes += kb * 1024 }
+                        DispatchQueue.main.async { self.volumeTotalBytes += kb * 1024 }
                     }
                 }
             }
         }
 
-        defer { isSearching = false; currentSearchPath = "" }
-
-        var all: [URL] = []
-        for root in roots {
-            let found = await _scanFolder(root)
-            all.append(contentsOf: found)
+        // Scan läuft auf GCD-Thread — kein Swift-Concurrency-Task, stabiler bei TCC-Dialogen
+        let startTime = scanStartTime
+        let result: [URL] = await withCheckedContinuation { cont in
+            DispatchQueue.global(qos: .userInitiated).async {
+                var all: [URL] = []
+                for root in roots {
+                    all.append(contentsOf: self._scanFolderGCD(root, startTime: startTime))
+                }
+                DispatchQueue.main.async {
+                    self.isSearching = false
+                    self.currentSearchPath = ""
+                    cont.resume(returning: all)
+                }
+            }
         }
-        return all
+        return result
     }
 
-    // Einzelnen Ordner scannen (interner Helfer)
-    private func _scanFolder(_ folderURL: URL) async -> [URL] {
-        return await Task.detached(priority: .userInitiated) {
-            guard let enumerator = FileManager.default.enumerator(
-                at: folderURL,
-                includingPropertiesForKeys: [.isRegularFileKey, .isDirectoryKey],
-                options: [.skipsHiddenFiles]
-            ) else { return [] }
+    // Scan läuft synchron auf GCD-Thread — robust gegen TCC-Unterbrechungen
+    private nonisolated func _scanFolderGCD(_ folderURL: URL, startTime: Date) -> [URL] {
+        // errorHandler: Fehler (z.B. Zugriff verweigert) ignorieren statt crashen
+        guard let enumerator = FileManager.default.enumerator(
+            at: folderURL,
+            includingPropertiesForKeys: [.isRegularFileKey, .isDirectoryKey, .fileSizeKey],
+            options: [.skipsHiddenFiles],
+            errorHandler: { _, _ in return true }
+        ) else { return [] }
 
-            var found: [URL] = []
-            while let obj = enumerator.nextObject() {
-                guard let url = obj as? URL else { continue }
+        var found: [URL] = []
+        var pendingBytes: Int64 = 0
+        var pendingCount = 0
+        var lastUIUpdate = Date()
 
-                // Geschützte/irrelevante Ordner überspringen
-                var isDir: ObjCBool = false
-                FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir)
-                if isDir.boolValue {
-                    let p = url.path
-                    // System-Verzeichnisse beim Scan von Root überspringen
-                    if Converter.skippedRootPaths.contains(p) {
-                        enumerator.skipDescendants()
-                        continue
-                    }
-                    if Converter.skippedDirectoryNames.contains(url.lastPathComponent) {
-                        enumerator.skipDescendants()
-                    } else {
-                        let dirPath = p.replacingOccurrences(of: NSHomeDirectory(), with: "~")
-                        await MainActor.run { self.currentSearchPath = dirPath }
-                    }
-                    continue
-                }
+        while let obj = enumerator.nextObject() {
+            guard let url = obj as? URL else { continue }
 
-                // Dateigröße zum Scan-Fortschritt addieren
-                let fileSize = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize).flatMap { Int64($0) } ?? 0
-
-                if url.pathExtension.lowercased() == "indd" {
-                    found.append(url)
-                    let count = found.count
-                    await MainActor.run {
-                        self.searchCount = count
-                        self.scannedBytes += fileSize
-                        let elapsed = Date().timeIntervalSince(self.scanStartTime)
-                        if elapsed > 1 { self.scanBytesPerSecond = Double(self.scannedBytes) / elapsed }
-                    }
+            var isDir: ObjCBool = false
+            FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir)
+            if isDir.boolValue {
+                let p = url.path
+                if Converter.skippedRootPaths.contains(p) || Converter.skippedDirectoryNames.contains(url.lastPathComponent) {
+                    enumerator.skipDescendants()
                 } else {
-                    await MainActor.run {
-                        self.scannedBytes += fileSize
-                        let elapsed = Date().timeIntervalSince(self.scanStartTime)
-                        if elapsed > 1 { self.scanBytesPerSecond = Double(self.scannedBytes) / elapsed }
-                    }
+                    let display = p.replacingOccurrences(of: NSHomeDirectory(), with: "~")
+                    DispatchQueue.main.async { self.currentSearchPath = display }
                 }
+                continue
             }
-            return found
-        }.value
+
+            let fileSize = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize).flatMap { Int64($0) } ?? 0
+            pendingBytes += fileSize
+            if url.pathExtension.lowercased() == "indd" {
+                found.append(url)
+                pendingCount = found.count
+            }
+
+            // UI nur alle 0.3s updaten — sonst bremst DispatchQueue.main.async den Scan aus
+            let now = Date()
+            if now.timeIntervalSince(lastUIUpdate) >= 0.3 {
+                lastUIUpdate = now
+                let bytes = pendingBytes
+                let count = pendingCount
+                let startTime = startTime
+                DispatchQueue.main.async {
+                    self.scannedBytes += bytes
+                    self.searchCount = count
+                    let elapsed = Date().timeIntervalSince(startTime)
+                    if elapsed > 1 { self.scanBytesPerSecond = Double(self.scannedBytes) / elapsed }
+                }
+                pendingBytes = 0
+            }
+        }
+        // Rest-Update
+        if pendingBytes > 0 {
+            let bytes = pendingBytes; let count = pendingCount
+            DispatchQueue.main.async {
+                self.scannedBytes += bytes
+                self.searchCount = count
+                let elapsed = Date().timeIntervalSince(startTime)
+                if elapsed > 1 { self.scanBytesPerSecond = Double(self.scannedBytes) / elapsed }
+            }
+        }
+        return found
     }
 
     @Published public var isSearching = false
