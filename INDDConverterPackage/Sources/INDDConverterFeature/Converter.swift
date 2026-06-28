@@ -43,12 +43,11 @@ public class Converter: ObservableObject {
         isSearching = true
         searchCount = 0
         scannedBytes = 0
-        totalBytes = (try? folderURL.resourceValues(forKeys: [.volumeTotalCapacityKey]).volumeTotalCapacity).flatMap { Int64($0) } ?? 0
-        // Bessere Schätzung: Größe des Ordners selbst
-        if let attrs = try? FileManager.default.attributesOfItem(atPath: folderURL.path),
-           let size = attrs[.size] as? Int64 {
-            totalBytes = size
-        }
+        scanBytesPerSecond = 0
+        scanStartTime = Date()
+        // Gesamtkapazität des Volumes ermitteln
+        let volCapacity = (try? folderURL.resourceValues(forKeys: [.volumeTotalCapacityKey]).volumeTotalCapacity).flatMap { Int64($0) } ?? 0
+        volumeTotalBytes = volCapacity
         defer { isSearching = false; currentSearchPath = "" }
 
         return await Task.detached(priority: .userInitiated) {
@@ -84,9 +83,15 @@ public class Converter: ObservableObject {
                     await MainActor.run {
                         self.searchCount = count
                         self.scannedBytes += fileSize
+                        let elapsed = Date().timeIntervalSince(self.scanStartTime)
+                        if elapsed > 1 { self.scanBytesPerSecond = Double(self.scannedBytes) / elapsed }
                     }
                 } else {
-                    await MainActor.run { self.scannedBytes += fileSize }
+                    await MainActor.run {
+                        self.scannedBytes += fileSize
+                        let elapsed = Date().timeIntervalSince(self.scanStartTime)
+                        if elapsed > 1 { self.scanBytesPerSecond = Double(self.scannedBytes) / elapsed }
+                    }
                 }
             }
             return found
@@ -97,7 +102,9 @@ public class Converter: ObservableObject {
     @Published public var searchCount = 0
     @Published public var currentSearchPath = ""
     @Published public var scannedBytes: Int64 = 0
-    @Published public var totalBytes: Int64 = 0
+    @Published public var volumeTotalBytes: Int64 = 0
+    @Published public var scanBytesPerSecond: Double = 0
+    public var scanStartTime: Date = Date()
 
     public func convert(files: [URL]) async {
         isRunning = true

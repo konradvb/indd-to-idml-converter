@@ -66,6 +66,15 @@ public struct ContentView: View {
 
     public init() {}
 
+    var etaString: String? {
+        guard converter.scanBytesPerSecond > 0, converter.volumeTotalBytes > 0 else { return nil }
+        let remaining = Double(converter.volumeTotalBytes - converter.scannedBytes)
+        let seconds = remaining / converter.scanBytesPerSecond
+        if seconds < 60 { return "\(Int(seconds)) Sek." }
+        if seconds < 3600 { return "\(Int(seconds / 60)) Min." }
+        return String(format: "%.1f Std.", seconds / 3600)
+    }
+
     var successCount: Int { converter.results.filter { $0.success && $0.error == nil }.count }
     var skippedCount: Int { converter.results.filter { $0.success && $0.error != nil }.count }
     var errorCount: Int { converter.results.filter { !$0.success }.count }
@@ -147,29 +156,77 @@ public struct ContentView: View {
 
                 // Suchfortschritt
                 if converter.isSearching {
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack(spacing: 8) {
-                            ProgressView().controlSize(.small)
-                            Text(converter.searchCount == 0
-                                 ? "Suche läuft …"
-                                 : "\(converter.searchCount) .indd \(converter.searchCount == 1 ? "Datei" : "Dateien") gefunden")
-                                .font(.callout.bold())
+                    VStack(alignment: .leading, spacing: 8) {
+                        // Kopfzeile: Dateien + Geschwindigkeit
+                        HStack {
+                            HStack(spacing: 6) {
+                                ProgressView().controlSize(.small)
+                                Text(converter.searchCount == 0
+                                     ? "Suche läuft …"
+                                     : "\(converter.searchCount) .indd \(converter.searchCount == 1 ? "Datei" : "Dateien") gefunden")
+                                    .font(.callout.bold())
+                            }
                             Spacer()
-                            if converter.scannedBytes > 0 {
-                                Text(formatBytes(converter.scannedBytes) + " gescannt")
+                            if converter.scanBytesPerSecond > 0 {
+                                Text(formatBytes(Int64(converter.scanBytesPerSecond)) + "/s")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
                         }
+
+                        // GB-Fortschrittsbalken
+                        if converter.volumeTotalBytes > 0 && converter.scannedBytes > 0 {
+                            let progress = min(1.0, Double(converter.scannedBytes) / Double(converter.volumeTotalBytes))
+                            VStack(alignment: .leading, spacing: 3) {
+                                ProgressView(value: progress)
+                                    .progressViewStyle(.linear)
+                                    .tint(.blue)
+                                HStack {
+                                    Text("\(formatBytes(converter.scannedBytes)) von \(formatBytes(converter.volumeTotalBytes))")
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                    Spacer()
+                                    if let eta = etaString {
+                                        Text("noch ca. \(eta)")
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                            }
+                        }
+
+                        // Aktueller Pfad
                         if !converter.currentSearchPath.isEmpty {
                             Text(converter.currentSearchPath)
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.tertiary)
                                 .lineLimit(1)
                                 .truncationMode(.middle)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 10)
+                    .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
+                }
+
+                // Roots anzeigen (vor dem Scan)
+                if !sourceRoots.isEmpty && !converter.isSearching && foundFiles.isEmpty && converter.results.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(sourceRoots, id: \.path) { root in
+                            HStack(spacing: 6) {
+                                Image(systemName: root.hasDirectoryPath ? "folder.fill" : "doc.fill")
+                                    .foregroundStyle(.blue)
+                                    .font(.caption)
+                                Text(root.path.replacingOccurrences(of: NSHomeDirectory(), with: "~"))
+                                    .font(.caption)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                    .foregroundStyle(.primary)
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 8)
                     .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
