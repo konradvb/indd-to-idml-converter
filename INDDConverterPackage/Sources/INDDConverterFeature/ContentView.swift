@@ -10,7 +10,8 @@ public struct ContentView: View {
 
     public init() {}
 
-    var successCount: Int { converter.results.filter(\.success).count }
+    var successCount: Int { converter.results.filter { $0.success && $0.error == nil }.count }
+    var skippedCount: Int { converter.results.filter { $0.success && $0.error != nil }.count }
     var errorCount: Int { converter.results.filter { !$0.success }.count }
 
     public var body: some View {
@@ -170,6 +171,14 @@ public struct ContentView: View {
                     systemImage: "checkmark.circle.fill"
                 )
                 .foregroundStyle(.green)
+
+                if skippedCount > 0 {
+                    Label(
+                        String(format: String(localized: "status.skipped", bundle: .module), skippedCount),
+                        systemImage: "forward.circle.fill"
+                    )
+                    .foregroundStyle(.secondary)
+                }
 
                 if errorCount > 0 {
                     Label(

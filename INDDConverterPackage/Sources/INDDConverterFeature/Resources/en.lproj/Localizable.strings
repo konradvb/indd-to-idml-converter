@@ -10,6 +10,7 @@
 "status.files.one" = "1 .indd file found";
 "status.files.many" = "%lld .indd files found";
 "status.success" = "%lld converted";
+"status.skipped" = "%lld skipped";
 "status.errors" = "%lld failed";
 
 /* Buttons */
