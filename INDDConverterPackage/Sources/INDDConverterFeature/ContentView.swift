@@ -326,22 +326,26 @@ public struct ContentView: View {
 
     @ViewBuilder
     private var searchProgressView: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                HStack(spacing: 6) {
-                    ProgressView().controlSize(.small)
-                    Text(converter.searchCount == 0
-                         ? "Ordner wird durchsucht …"
-                         : "\(converter.searchCount) .indd \(converter.searchCount == 1 ? "Datei" : "Dateien") gefunden")
-                        .font(.callout.bold())
+        VStack(alignment: .leading, spacing: 10) {
+
+            // Status-Zeile
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Suche läuft …").font(.callout.bold())
+                    if !converter.currentSearchPath.isEmpty {
+                        Text(converter.currentSearchPath)
+                            .font(.caption2).foregroundStyle(.secondary)
+                            .lineLimit(1).truncationMode(.middle)
+                    }
                 }
                 Spacer()
-                if converter.scanBytesPerSecond > 0 {
-                    Text(formatBytes(Int64(converter.scanBytesPerSecond)) + "/s")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
+                Button("Abbrechen") { cancelScan() }
+                    .buttonStyle(.bordered).controlSize(.small)
             }
-            if converter.volumeTotalBytes > 0 && converter.scannedBytes > 0 {
+
+            // Fortschrittsbalken (nur wenn Gesamtgröße bekannt)
+            if converter.volumeTotalBytes > 0 {
                 let progress = min(1.0, Double(converter.scannedBytes) / Double(converter.volumeTotalBytes))
                 VStack(alignment: .leading, spacing: 3) {
                     ProgressView(value: progress).progressViewStyle(.linear).tint(.blue)
@@ -349,17 +353,47 @@ public struct ContentView: View {
                         Text("\(formatBytes(converter.scannedBytes)) von \(formatBytes(converter.volumeTotalBytes))")
                             .font(.caption2).foregroundStyle(.secondary)
                         Spacer()
+                        if converter.scanBytesPerSecond > 0 {
+                            Text(formatBytes(Int64(converter.scanBytesPerSecond)) + "/s")
+                                .font(.caption2).foregroundStyle(.secondary)
+                        }
                         if let eta = etaString {
-                            Text("noch ca. \(eta)").font(.caption2).foregroundStyle(.secondary)
+                            Text("· noch ca. \(eta)").font(.caption2).foregroundStyle(.secondary)
                         }
                     }
                 }
             }
-            if !converter.currentSearchPath.isEmpty {
-                Text(converter.currentSearchPath)
-                    .font(.caption).foregroundStyle(.tertiary)
-                    .lineLimit(1).truncationMode(.middle)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+
+            // Bereits gefundene Dateien live anzeigen
+            if converter.searchCount > 0 {
+                Divider()
+                HStack {
+                    Image(systemName: "doc.text.fill").foregroundStyle(.blue).font(.caption)
+                    Text("\(converter.searchCount) .indd \(converter.searchCount == 1 ? "Datei" : "Dateien") gefunden")
+                        .font(.caption.bold()).foregroundStyle(.blue)
+                }
+                // Live-Liste der letzten gefundenen Dateien aus foundFiles
+                if !converter.liveFoundFiles.isEmpty {
+                    VStack(alignment: .leading, spacing: 2) {
+                        ForEach(Array(converter.liveFoundFiles.suffix(5).enumerated()), id: \.offset) { _, url in
+                            Button {
+                                NSWorkspace.shared.activateFileViewerSelecting([url])
+                            } label: {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "arrow.right").font(.caption2).foregroundStyle(.tertiary)
+                                    Text(url.lastPathComponent)
+                                        .font(.caption2).foregroundStyle(.secondary)
+                                        .lineLimit(1).truncationMode(.middle)
+                                }
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        if converter.liveFoundFiles.count > 5 {
+                            Text("… und \(converter.liveFoundFiles.count - 5) weitere")
+                                .font(.caption2).foregroundStyle(.tertiary)
+                        }
+                    }
+                }
             }
         }
         .padding(.horizontal, 12).padding(.vertical, 10)
@@ -467,10 +501,7 @@ public struct ContentView: View {
                 Button("Scan starten") { startScan() }
                     .buttonStyle(.borderedProminent).controlSize(.large)
             }
-            if converter.isSearching {
-                Button("Abbrechen") { cancelScan() }
-                    .buttonStyle(.bordered).controlSize(.regular).foregroundStyle(.red)
-            }
+            // Abbrechen-Button ist bereits in searchProgressView — hier nicht nochmal
             if !foundFiles.isEmpty && !converter.isRunning && !converter.isSearching && converter.results.isEmpty {
                 HStack(spacing: 10) {
                     Button(String(localized: "button.start", bundle: .module)) {
