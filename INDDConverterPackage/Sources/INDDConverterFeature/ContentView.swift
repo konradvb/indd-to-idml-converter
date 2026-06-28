@@ -67,12 +67,19 @@ public struct ContentView: View {
     public init() {}
 
     var etaString: String? {
-        guard converter.scanBytesPerSecond > 0, converter.volumeTotalBytes > 0 else { return nil }
-        let remaining = Double(converter.volumeTotalBytes - converter.scannedBytes)
-        let seconds = remaining / converter.scanBytesPerSecond
-        if seconds < 60 { return "\(Int(seconds)) Sek." }
-        if seconds < 3600 { return "\(Int(seconds / 60)) Min." }
-        return String(format: "%.1f Std.", seconds / 3600)
+        guard converter.volumeTotalBytes > 0,
+              converter.scannedBytes > 0 else { return nil }
+        let progress = Double(converter.scannedBytes) / Double(converter.volumeTotalBytes)
+        guard progress > 0.005 else { return nil } // erst ab 0.5% sinnvoll
+        let elapsed = Date().timeIntervalSince(converter.scanStartTime)
+        // Hochrechnung: wie lange dauert alles, wenn wir linear weitermachen?
+        // + 60% Puffer damit die Anzeige eher zu lang ist als zu kurz
+        let totalEstimated = (elapsed / progress) * 1.6
+        let remaining = totalEstimated - elapsed
+        if remaining < 10 { return nil }
+        if remaining < 90 { return "\(Int(remaining / 10) * 10) Sek." }
+        if remaining < 3600 { return "\(Int(remaining / 60) + 1) Min." }
+        return String(format: "%.1f Std.", remaining / 3600)
     }
 
     var successCount: Int { converter.results.filter { $0.success && $0.error == nil }.count }
