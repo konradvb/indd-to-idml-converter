@@ -198,6 +198,17 @@ public struct ContentView: View {
                         Button(String(localized: "drop.button.folder", bundle: .module)) { pickFolder() }
                             .buttonStyle(.bordered).controlSize(.small)
                     }
+                    Button {
+                        addAllVolumes()
+                    } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: "externaldrive.fill.badge.checkmark")
+                            Text("Alle Laufwerke durchsuchen")
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .padding(.top, 4)
                 }
             }
             .frame(minHeight: 130)
@@ -530,6 +541,18 @@ public struct ContentView: View {
             addRoots(newRoots, asFiles: files.isEmpty ? false : dirs.isEmpty)
         }
         return true
+    }
+
+    private func addAllVolumes() {
+        let fm = FileManager.default
+        // Alle gemounteten Volumes
+        let mountedVolumes = (fm.mountedVolumeURLs(includingResourceValuesForKeys: [.isVolumeKey, .volumeIsEjectableKey], options: [.skipHiddenVolumes]) ?? [])
+        // Root-Laufwerk explizit hinzufügen (wird von mountedVolumeURLs oft nicht gelistet)
+        var roots = mountedVolumes
+        let mainDisk = URL(fileURLWithPath: "/")
+        if !roots.contains(mainDisk) { roots.insert(mainDisk, at: 0) }
+        if roots.isEmpty { roots = [URL(fileURLWithPath: "/")] }
+        addRoots(roots, asFiles: false)
     }
 
     private func loadURL(from provider: NSItemProvider, typeId: String) async -> URL? {
