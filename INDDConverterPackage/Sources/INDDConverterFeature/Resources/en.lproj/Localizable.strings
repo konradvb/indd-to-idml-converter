@@ -16,6 +16,7 @@
 /* Buttons */
 "button.start" = "Start Conversion";
 "button.reset" = "Choose Another Folder";
+"button.show_finder" = "Show in Finder";
 
 /* Warning */
 "warning.no_indesign" = "Adobe InDesign not found – please install it first.";

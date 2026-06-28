@@ -1,9 +1,64 @@
 import SwiftUI
 import AppKit
 
+private struct ResultRow: View {
+    let result: ConversionResult
+
+    var body: some View {
+        let fileURL = URL(fileURLWithPath: result.path)
+        let idmlURL = fileURL.deletingPathExtension().appendingPathExtension("idml")
+        let isSkipped = result.success && result.error != nil
+
+        Button {
+            let target = (result.success && !isSkipped) ? idmlURL : fileURL
+            NSWorkspace.shared.activateFileViewerSelecting([target])
+        } label: {
+            HStack(spacing: 5) {
+                resultIcon(isSkipped: isSkipped)
+                Text(fileURL.lastPathComponent)
+                    .font(.caption)
+                    .foregroundStyle(result.success ? Color.primary : Color.red)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Spacer()
+                if !result.success, let err = result.error {
+                    Text(err)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .frame(maxWidth: 140, alignment: .trailing)
+                }
+                Image(systemName: "arrow.right.circle")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .background(RoundedRectangle(cornerRadius: 5).fill(Color(nsColor: .controlBackgroundColor).opacity(0.6)))
+    }
+
+    @ViewBuilder
+    private func resultIcon(isSkipped: Bool) -> some View {
+        if result.success {
+            if isSkipped {
+                Image(systemName: "forward.circle").foregroundStyle(Color.secondary).font(.caption)
+            } else {
+                Image(systemName: "checkmark.circle.fill").foregroundStyle(Color.green).font(.caption)
+            }
+        } else {
+            Image(systemName: "xmark.circle.fill").foregroundStyle(Color.red).font(.caption)
+        }
+    }
+}
+
 public struct ContentView: View {
     @StateObject private var converter = Converter()
     @State private var foundFiles: [URL] = []
+    @State private var sourceRoots: [URL] = []
     @State private var isDragging = false
     @State private var errorMessage: String?
     private let inDesignInstalled = Converter.inDesignInstalled()
@@ -89,6 +144,16 @@ public struct ContentView: View {
                     }
                 }
 
+                // Suchfortschritt
+                if converter.isSearching {
+                    HStack(spacing: 8) {
+                        ProgressView().controlSize(.small)
+                        Text("\(converter.searchCount) .indd Dateien gefunden …")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
                 // Status-Bereich
                 if !foundFiles.isEmpty || converter.isRunning || !converter.results.isEmpty {
                     VStack(spacing: 14) {
@@ -131,6 +196,7 @@ public struct ContentView: View {
                     if !converter.results.isEmpty && !converter.isRunning {
                         Button(String(localized: "button.reset", bundle: .module)) {
                             foundFiles = []
+                            sourceRoots = []
                             converter.results = []
                             converter.progress = 0
                             errorMessage = nil
@@ -153,13 +219,37 @@ public struct ContentView: View {
             ? String(localized: "status.files.one", bundle: .module)
             : String(format: String(localized: "status.files.many", bundle: .module), count)
 
-        HStack(spacing: 6) {
-            Image(systemName: "doc.fill").foregroundStyle(.blue)
-            Text(text).font(.callout).foregroundStyle(.secondary)
+        VStack(spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: "doc.fill").foregroundStyle(.blue)
+                Text(text).font(.callout).foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(.blue.opacity(0.08), in: Capsule())
+
+            // Quellpfade anzeigen
+            VStack(alignment: .leading, spacing: 3) {
+                ForEach(sourceRoots, id: \.path) { root in
+                    Button {
+                        NSWorkspace.shared.activateFileViewerSelecting([root])
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: root.hasDirectoryPath ? "folder" : "doc")
+                                .font(.caption2)
+                            Text(root.path.replacingOccurrences(of: NSHomeDirectory(), with: "~"))
+                                .font(.caption)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        }
+                        .foregroundStyle(.blue)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 4)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .background(.blue.opacity(0.08), in: Capsule())
     }
 
     @ViewBuilder
@@ -190,22 +280,31 @@ public struct ContentView: View {
             }
             .font(.callout.bold())
 
-            // Fehlerdetails
-            if errorCount > 0 {
-                let failed = converter.results.filter { !$0.success }
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 4) {
-                        ForEach(failed, id: \.path) { r in
-                            Text("✗ \(URL(fileURLWithPath: r.path).lastPathComponent): \(r.error ?? "")")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
+            // Ergebnisliste: alle Dateien anklickbar
+            ScrollView {
+                VStack(alignment: .leading, spacing: 3) {
+                    ForEach(Array(converter.results.enumerated()), id: \.offset) { _, r in
+                        ResultRow(result: r)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .frame(maxHeight: 80)
-                .padding(8)
-                .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxHeight: 140)
+
+            // Im Finder zeigen Button
+            if !sourceRoots.isEmpty {
+                HStack {
+                    ForEach(sourceRoots.prefix(2), id: \.path) { root in
+                        Button {
+                            NSWorkspace.shared.activateFileViewerSelecting([root])
+                        } label: {
+                            Label(String(localized: "button.show_finder", bundle: .module), systemImage: "folder")
+                                .font(.caption)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    }
+                }
             }
         }
         .padding(.horizontal, 16)
@@ -221,7 +320,7 @@ public struct ContentView: View {
         panel.allowsMultipleSelection = true
         panel.allowedContentTypes = [.init(filenameExtension: "indd")!]
         if panel.runModal() == .OK {
-            loadURLs(panel.urls)
+            loadURLs(panel.urls, roots: panel.urls)
         }
     }
 
@@ -232,13 +331,22 @@ public struct ContentView: View {
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
         if panel.runModal() == .OK, let url = panel.url {
-            loadURLs(converter.findInddFiles(in: url))
+            sourceRoots = [url]
+            converter.results = []
+            converter.progress = 0
+            errorMessage = nil
+            Task {
+                let files = await converter.findInddFilesAsync(in: url)
+                foundFiles = files
+                if files.isEmpty { errorMessage = "Keine .indd Dateien gefunden." }
+            }
         }
     }
 
     private func handleDrop(_ providers: [NSItemProvider]) -> Bool {
         Task {
             var collected: [URL] = []
+            var roots: [URL] = []
             for provider in providers {
                 guard let data = await withCheckedContinuation({ cont in
                     provider.loadItem(forTypeIdentifier: "public.file-url", options: nil) { item, _ in
@@ -250,22 +358,26 @@ public struct ContentView: View {
                 FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir)
 
                 if isDir.boolValue {
-                    collected.append(contentsOf: converter.findInddFiles(in: url))
+                    roots.append(url)
+                    let found = await converter.findInddFilesAsync(in: url)
+                    collected.append(contentsOf: found)
                 } else if url.pathExtension.lowercased() == "indd" {
+                    roots.append(url)
                     collected.append(url)
                 }
             }
             if collected.isEmpty {
                 errorMessage = "Keine .indd Dateien gefunden."
             } else {
-                loadURLs(collected)
+                loadURLs(collected, roots: roots)
             }
         }
         return true
     }
 
-    private func loadURLs(_ urls: [URL]) {
+    private func loadURLs(_ urls: [URL], roots: [URL]) {
         foundFiles = urls
+        sourceRoots = roots
         converter.results = []
         converter.progress = 0
         errorMessage = nil
