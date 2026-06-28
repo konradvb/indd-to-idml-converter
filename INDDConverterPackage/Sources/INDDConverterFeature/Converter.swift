@@ -266,10 +266,14 @@ public class Converter: ObservableObject {
         }
 
         let script = """
-with timeout of 300 seconds
+with timeout of 600 seconds
     tell application "Adobe InDesign 2026"
-        -- Dialoge vor dem Öffnen deaktivieren
-        set userInteractionLevel to never interact
+        -- KORREKTE Property: liegt auf "script preferences", nicht auf der App selbst.
+        -- "never interact" unterdrückt fehlende-Verknüpfungen- und fehlende-Schriften-Dialoge beim Öffnen.
+        set user interaction level of script preferences to never interact
+        try
+            set redraw of script preferences to false
+        end try
         set theDoc to missing value
         try
             set theAlias to POSIX file "\(tempIndd.path)" as alias
@@ -283,43 +287,55 @@ with timeout of 300 seconds
                 close theDoc saving no
             end try
         end if
-        set userInteractionLevel to interact with all
+        try
+            set redraw of script preferences to true
+        end try
+        set user interaction level of script preferences to interact with all
     end tell
 end timeout
 """
 
-        // Dialog-Watcher: klickt automatisch Verknüpfungs-Dialoge in InDesign weg
+        // Dialog-Watcher als Fallback: klickt verbleibende Dialoge automatisch weg.
+        // Prioritätsliste — die "weitermachen ohne Änderung"-Buttons zuerst,
+        // niemals "Abbrechen"/"Aktualisieren" (würde Öffnen abbrechen oder Relink starten).
         let watcherScript = """
-repeat 120 times
-    delay 0.5
-    tell application "System Events"
-        if exists process "Adobe InDesign 2026" then
-            tell process "Adobe InDesign 2026"
-                repeat with w in windows
-                    try
-                        repeat with b in buttons of w
-                            set btnName to name of b
-                            if btnName contains "Don't Update" or btnName contains "Nicht aktuali" or btnName contains "Beibehalten" or btnName contains "OK" or btnName contains "Schließen" then
-                                click b
-                                exit repeat
-                            end if
-                        end repeat
-                    end try
-                    try
-                        repeat with s in sheets of w
-                            repeat with b in buttons of s
-                                set btnName to name of b
-                                if btnName contains "Don't Update" or btnName contains "Nicht aktuali" or btnName contains "Beibehalten" or btnName contains "OK" then
-                                    click b
-                                    exit repeat
-                                end if
+set dismissNames to {"Don't Update", "Nicht aktualisieren", "Nicht aktuali", "Ignorieren", "Ignore", "Beibehalten", "Keep", "Übernehmen", "Apply", "OK", "Fortfahren", "Continue", "Schließen", "Close", "Fertig", "Done"}
+repeat 2000 times
+    delay 0.3
+    try
+        tell application "System Events"
+            if exists (process "Adobe InDesign 2026") then
+                tell process "Adobe InDesign 2026"
+                    repeat with w in (every window)
+                        set btns to {}
+                        try
+                            set btns to buttons of w
+                        end try
+                        try
+                            repeat with s in (sheets of w)
+                                set btns to btns & (buttons of s)
                             end repeat
                         end try
-                    end try
-                end repeat
-            end tell
-        end if
-    end tell
+                        if (count of btns) > 0 then
+                            repeat with targetName in dismissNames
+                                set clicked to false
+                                repeat with b in btns
+                                    try
+                                        if (name of b) contains targetName then
+                                            click b
+                                            set clicked to true
+                                            exit repeat
+                                        end if
+                                    end try
+                                end repeat
+                                if clicked then exit repeat
+                            end repeat
+                        end if
+                    end repeat
+                end tell
+            end if
+        end tell
+    end try
 end repeat
 """
         let watcherFile = desktop.appendingPathComponent("_indd_watcher.applescript")
@@ -357,8 +373,8 @@ end repeat
             } catch {
                 cont.resume(returning: -1)
             }
-            // Sicherheits-Timeout: nach 360s abbrechen
-            DispatchQueue.global().asyncAfter(deadline: .now() + 360) {
+            // Sicherheits-Timeout: nach 600s abbrechen (passt zum Script-Timeout)
+            DispatchQueue.global().asyncAfter(deadline: .now() + 600) {
                 if process.isRunning {
                     process.terminate()
                 }

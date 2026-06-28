@@ -218,26 +218,40 @@ public struct ContentView: View {
 
                 VStack(alignment: .leading, spacing: 0) {
                     // Titelzeile
-                    HStack {
-                        Text(sourceRoots.count == 1 ? "Ausgewählt" : "\(sourceRoots.count) Quellen")
-                            .font(.caption.bold())
-                            .foregroundStyle(.secondary)
+                    HStack(spacing: 8) {
+                        Text(sourceRoots.count == 1 ? "1 Quelle ausgewählt" : "\(sourceRoots.count) Quellen ausgewählt")
+                            .font(.callout.bold())
+                            .foregroundStyle(.primary)
                         Spacer()
-                        // Weiteres hinzufügen
+                        // Weiteres hinzufügen / zurücksetzen — größere, klar tappbare Buttons
                         if !converter.isSearching {
-                            HStack(spacing: 6) {
+                            HStack(spacing: 4) {
                                 Button { pickFiles() } label: {
-                                    Image(systemName: "plus.circle").font(.caption)
+                                    Image(systemName: "doc.badge.plus")
+                                        .font(.system(size: 16, weight: .medium))
+                                        .frame(width: 30, height: 26)
+                                        .contentShape(Rectangle())
                                 }
-                                .buttonStyle(.plain).foregroundStyle(.blue)
+                                .buttonStyle(.borderless).foregroundStyle(.blue)
+                                .help("Dateien hinzufügen")
+
                                 Button { pickFolder() } label: {
-                                    Image(systemName: "folder.badge.plus").font(.caption)
+                                    Image(systemName: "folder.badge.plus")
+                                        .font(.system(size: 16, weight: .medium))
+                                        .frame(width: 30, height: 26)
+                                        .contentShape(Rectangle())
                                 }
-                                .buttonStyle(.plain).foregroundStyle(.blue)
+                                .buttonStyle(.borderless).foregroundStyle(.blue)
+                                .help("Ordner hinzufügen")
+
                                 Button { fullReset() } label: {
-                                    Image(systemName: "xmark.circle.fill").font(.caption)
+                                    Image(systemName: "trash")
+                                        .font(.system(size: 15, weight: .medium))
+                                        .frame(width: 30, height: 26)
+                                        .contentShape(Rectangle())
                                 }
-                                .buttonStyle(.plain).foregroundStyle(.secondary)
+                                .buttonStyle(.borderless).foregroundStyle(.secondary)
+                                .help("Alle entfernen")
                             }
                         }
                     }
@@ -293,7 +307,8 @@ public struct ContentView: View {
                         }
                         .padding(.vertical, 4)
                     }
-                    .frame(maxHeight: 140)
+                    // Adaptive Höhe: wächst bis ~3 Quellen, danach wird gescrollt
+                    .frame(height: min(CGFloat(sourceRoots.count) * 42 + 8, 138))
 
                     // Drag-Hinweis unten
                     if isDragging {
@@ -361,27 +376,31 @@ public struct ContentView: View {
                     Text("\(converter.searchCount) .indd \(converter.searchCount == 1 ? "Datei" : "Dateien") gefunden")
                         .font(.caption.bold()).foregroundStyle(.blue)
                 }
-                // Live-Liste der letzten gefundenen Dateien aus foundFiles
+                // Live-Liste ALLER gefundenen Dateien — scrollbar schon während der Suche.
+                // LazyVStack rendert nur sichtbare Zeilen, daher auch bei tausenden flüssig.
                 if !converter.liveFoundFiles.isEmpty {
-                    VStack(alignment: .leading, spacing: 2) {
-                        ForEach(Array(converter.liveFoundFiles.suffix(5).enumerated()), id: \.offset) { _, url in
-                            Button {
-                                NSWorkspace.shared.activateFileViewerSelecting([url])
-                            } label: {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "arrow.right").font(.caption2).foregroundStyle(.tertiary)
-                                    Text(url.lastPathComponent)
-                                        .font(.caption2).foregroundStyle(.secondary)
-                                        .lineLimit(1).truncationMode(.middle)
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 2) {
+                            ForEach(Array(converter.liveFoundFiles.enumerated()), id: \.offset) { _, url in
+                                Button {
+                                    NSWorkspace.shared.activateFileViewerSelecting([url])
+                                } label: {
+                                    HStack(spacing: 5) {
+                                        Image(systemName: "doc").font(.caption2).foregroundStyle(.blue)
+                                        Text(url.lastPathComponent)
+                                            .font(.caption).foregroundStyle(.primary)
+                                            .lineLimit(1).truncationMode(.middle)
+                                        Spacer()
+                                    }
+                                    .padding(.horizontal, 4).padding(.vertical, 1)
+                                    .contentShape(Rectangle())
                                 }
+                                .buttonStyle(.plain)
                             }
-                            .buttonStyle(.plain)
                         }
-                        if converter.liveFoundFiles.count > 5 {
-                            Text("… und \(converter.liveFoundFiles.count - 5) weitere")
-                                .font(.caption2).foregroundStyle(.tertiary)
-                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
+                    .frame(maxHeight: 170)
                 }
             }
         }
@@ -432,7 +451,7 @@ public struct ContentView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(maxHeight: 110)
+            .frame(maxHeight: 240)
         }
         .padding(.horizontal, 12).padding(.vertical, 10)
         .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
