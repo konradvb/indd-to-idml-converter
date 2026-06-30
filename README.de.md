@@ -10,6 +10,12 @@ Wandelt Adobe-InDesign-Dateien (`.indd`) ins offene **IDML**-Format um — im St
 
 > **Perfekt für den Moment, bevor du dein Adobe-Abo kündigst.** Zeig der App einen Ordner (oder die ganze Festplatte), und sie speichert jedes InDesign-Dokument als offenes `.idml` direkt neben das Original. Dein Archiv bleibt für immer offenbar.
 
+<p align="center">
+  <img src="docs/screenshots/01_empty.png" width="260" alt="App-Start — Drop-Zone">
+  <img src="docs/screenshots/02_sources.png" width="260" alt="Quellen ausgewählt, bereit zum Scannen">
+  <img src="docs/screenshots/03_scanning.png" width="260" alt="Scan läuft, .indd-Dateien werden gefunden">
+</p>
+
 ---
 
 ## Warum die Dateien überhaupt umwandeln?
@@ -30,6 +36,8 @@ Der Haken: Von Hand bedeutet das, jedes Dokument einzeln in InDesign zu öffnen 
 
 - **macOS 13** (Ventura) oder neuer
 - **Adobe InDesign installiert.** Die App steuert InDesign im Hintergrund für den eigentlichen Export — sie ist also ein **Migrations-/Archiv-Werkzeug, kein Adobe-Ersatz.** Du brauchst InDesign auf dem Rechner, *während* du konvertierst; danach kannst du kündigen und behältst die IDML-Dateien.
+
+> **Tipp:** Ein **kostenloses Adobe-Creative-Cloud-Probeabo** (7 Tage) reicht völlig aus, um die gesamte Konvertierung durchzuführen. InDesign über das Probeabo installieren, das ganze Archiv umwandeln, dann kündigen — kein langfristiges Abo nötig.
 
 ---
 
@@ -68,6 +76,16 @@ Der Haken: Von Hand bedeutet das, jedes Dokument einzeln in InDesign zu öffnen 
 | **Verknüpfte Bilder** | IDML speichert das *Layout*, nicht die Bilddateien. Liegt ein verknüpftes Bild nicht mehr am Originalpfad, bleibt der Rahmen in Affinity leer und muss neu verknüpft werden. |
 | **Cloud-/gesperrte Ordner** | Dateien in gesperrten App-Containern (z. B. manchen iCloud-Containern) können nicht direkt gelesen werden. Erst in einen normalen Ordner verschieben, dann konvertieren. |
 | **Dialoge** | Fehlende-Verknüpfungen- und Schriften-Abfragen werden automatisch unterdrückt — der Stapel läuft durch, ohne dass du klicken musst. |
+
+---
+
+## Verwandte Tools
+
+### adobe-fonts-revealer
+
+[**adobe-fonts-revealer**](https://github.com/Kalaschnik/adobe-fonts-revealer) durchsucht deine InDesign-Dateien und zeigt dir alle verwendeten Schriften an — noch vor der Konvertierung.
+
+Damit weißt du genau, welche Schriften in deinen `.indd`-Dateien eingebettet oder verknüpft sind, und kannst sicherstellen, dass du alle benötigten Schriften installiert (oder beschafft) hast, bevor du das fertige `.idml` in Affinity Publisher oder einer anderen App öffnest. Besonders praktisch bei größeren Archiven, wo fehlende Schriften sonst erst nachträglich einzeln als Warnungen auftauchen.
 
 ---
 

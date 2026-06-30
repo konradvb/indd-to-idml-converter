@@ -10,6 +10,12 @@ Convert Adobe InDesign files (`.indd`) to the open **IDML** format — in bulk, 
 
 > **Perfect for the moment before you cancel Adobe.** Point it at a folder (or your whole drive), and it saves every InDesign document as an open `.idml` right next to the original. Your archive stays openable — for good.
 
+<p align="center">
+  <img src="docs/screenshots/01_empty.png" width="260" alt="App start — drop zone">
+  <img src="docs/screenshots/02_sources.png" width="260" alt="Sources selected, ready to scan">
+  <img src="docs/screenshots/03_scanning.png" width="260" alt="Scan running, .indd files found">
+</p>
+
 ---
 
 ## Why convert your files at all?
@@ -30,6 +36,8 @@ The catch: doing this by hand means opening every single document in InDesign an
 
 - **macOS 13** (Ventura) or newer
 - **Adobe InDesign installed.** The app controls InDesign in the background to do the real export — so this is a **migration / archive helper, not an Adobe replacement.** You need InDesign on the machine while you convert; afterwards you can cancel and keep the IDML files.
+
+> **Tip:** A **free Adobe Creative Cloud trial** (7 days) is enough to run the entire conversion. Install InDesign via the trial, convert your whole archive, then cancel — no long-term subscription required.
 
 ---
 
@@ -68,6 +76,16 @@ The catch: doing this by hand means opening every single document in InDesign an
 | **Linked images** | IDML stores the *layout*, not the image files. If a linked image has moved from its original path, the frame appears empty in Affinity and needs to be re-linked. |
 | **Cloud / locked folders** | Files inside locked app containers (e.g. some iCloud app containers) can't be read directly. Move them into a normal folder first, then convert. |
 | **Dialogs** | Missing-link and missing-font prompts are suppressed automatically — the batch runs without you having to click anything. |
+
+---
+
+## Related Tools
+
+### adobe-fonts-revealer
+
+[**adobe-fonts-revealer**](https://github.com/Kalaschnik/adobe-fonts-revealer) scans your InDesign files and reveals every font referenced across your documents — before you convert.
+
+Use it to find out exactly which fonts are embedded or linked in your `.indd` files, so you know which ones you need to install (or source) before opening the converted `.idml` in Affinity Publisher or another app. Especially useful when migrating a large archive, where missing fonts would otherwise only surface one by one as warnings after the fact.
 
 ---
 

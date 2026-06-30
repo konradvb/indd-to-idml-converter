@@ -1,32 +1,32 @@
 -- convert_indd_to_idml.applescript
 --
--- Konvertiert alle InDesign-Dateien (.indd) aus einer Textliste
--- zu IDML-Dateien (.idml) und speichert sie im gleichen Ordner.
+-- Converts all InDesign files (.indd) from a text list
+-- to IDML files (.idml), saved in the same folder as the original.
 --
--- Funktioniert auch mit Dateien in geschützten Verzeichnissen:
--- iCloud App-Container (z.B. Scanbot), Dropbox, Google Drive, externe Laufwerke.
--- Die Datei wird dazu kurz auf den Desktop kopiert (InDesign hat dort Schreibrecht),
--- konvertiert, und die .idml danach zurück an den Originalort verschoben.
+-- Works with files in protected directories too:
+-- iCloud app containers (e.g. Scanbot), Dropbox, Google Drive, external drives.
+-- Each file is temporarily copied to the Desktop (where InDesign has write access),
+-- converted there, and the resulting .idml is moved back to the original location.
 --
--- Hinweise zum Ergebnis:
--- - Fehlende Schriften: InDesign ersetzt sie durch Platzhalter und exportiert trotzdem.
---   In Affinity Publisher erscheinen gelbe Warnungen, Schriften können dort neu zugewiesen werden.
--- - Verknüpfte Bilder (Links): Nur das Layout wird exportiert, nicht die Bilder selbst.
---   Fehlen die Originaldateien, sind Bildrahmen leer und müssen in Affinity neu verknüpft werden.
+-- Notes on the output:
+-- - Missing fonts: InDesign substitutes them with placeholders and still exports.
+--   Affinity Publisher shows yellow warnings; fonts can be reassigned there.
+-- - Linked images: only the layout is exported, not the image files themselves.
+--   If originals are missing, image frames appear empty and must be re-linked in Affinity.
 --
--- Voraussetzungen:
---   - Adobe InDesign muss installiert sein (getestet mit InDesign 2026)
---   - Eine Textdatei mit einem .indd-Dateipfad pro Zeile (siehe fileListPath)
---   - Die Dateien müssen lokal auf dem Mac verfügbar sein (nicht nur Cloud-Platzhalter)
+-- Requirements:
+--   - Adobe InDesign must be installed (tested with InDesign 2026)
+--   - A text file with one .indd file path per line (see fileListPath)
+--   - Files must be locally available on the Mac (not cloud-only placeholders)
 --
--- Anpassung: Passe die Pfad-Variablen unten an dein System an.
+-- Customization: adjust the path variables below to match your system.
 
 set fileListPath to "/tmp/indd_files.txt"
 set logPath to "/tmp/indd_to_idml_log.txt"
 set tempIndd to "/Users/" & (system attribute "USER") & "/Desktop/indd_convert_work.indd"
 set tempIdml to "/Users/" & (system attribute "USER") & "/Desktop/indd_convert_work.idml"
 
--- === Ab hier nichts ändern ===
+-- === Do not edit below this line ===
 
 set fileListHandle to open for access POSIX file fileListPath
 set fileListContent to read fileListHandle
@@ -52,8 +52,8 @@ with timeout of 7200 seconds
 
 				try
 					with timeout of 300 seconds
-						-- Datei auf Desktop kopieren (InDesign hat dort sicheren Schreibzugriff,
-						-- auch wenn die Quelldatei in einem anderen App-Container liegt)
+						-- Copy file to Desktop: InDesign has reliable write access there,
+						-- even when the source is in another app container.
 						do shell script "cp " & quoted form of inddPath & " " & quoted form of tempIndd
 
 						set theAlias to POSIX file tempIndd as alias
@@ -65,10 +65,10 @@ with timeout of 7200 seconds
 
 						close theDoc saving no
 
-						-- .idml zurück an Originalort verschieben
+						-- Move .idml back to the original location
 						do shell script "mv " & quoted form of tempIdml & " " & quoted form of idmlPath
 
-						-- Temporäre Kopie aufräumen
+						-- Clean up the temporary copy
 						do shell script "rm -f " & quoted form of tempIndd
 					end timeout
 
@@ -82,7 +82,7 @@ with timeout of 7200 seconds
 					set errorCount to errorCount + 1
 					do shell script "rm -f " & quoted form of tempIndd & " " & quoted form of tempIdml
 					set logHandle to open for access POSIX file logPath with write permission
-					write ("FEHLER: " & inddPath & " -- " & errMsg & return) to logHandle starting at eof
+					write ("ERROR: " & inddPath & " -- " & errMsg & return) to logHandle starting at eof
 					close access logHandle
 				end try
 			end if
@@ -93,7 +93,7 @@ with timeout of 7200 seconds
 end timeout
 
 set logHandle to open for access POSIX file logPath with write permission
-write ("---" & return & "Ergebnis: " & successCount & " erfolgreich, " & errorCount & " Fehler von " & totalCount & " Dateien" & return) to logHandle starting at eof
+write ("---" & return & "Result: " & successCount & " succeeded, " & errorCount & " errors out of " & totalCount & " files" & return) to logHandle starting at eof
 close access logHandle
 
-display dialog "Konvertierung abgeschlossen!" & return & successCount & " erfolgreich" & return & errorCount & " Fehler" buttons {"OK"} default button "OK"
+display dialog "Conversion complete!" & return & successCount & " succeeded" & return & errorCount & " errors" buttons {"OK"} default button "OK"
