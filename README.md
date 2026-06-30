@@ -124,24 +124,6 @@ open INDDConverter.xcworkspace
 xcodebuild -workspace INDDConverter.xcworkspace -scheme INDDConverter -configuration Release build
 ```
 
-### Notarized release (so it opens without the right-click step)
-
-One-time setup (needs a paid Apple Developer membership):
-
-1. Create a **Developer ID Application** certificate — Xcode → Settings → Accounts → Manage Certificates → **+**.
-2. Store notary credentials in your keychain:
-   ```bash
-   xcrun notarytool store-credentials INDD-Notary --apple-id YOUR@APPLE-ID --team-id YOURTEAMID
-   ```
-
-Then, for every release:
-
-```bash
-./notarize.sh        # builds, signs (Hardened Runtime), notarizes, staples → dist/INDDConverter-notarized.zip
-```
-
-The app is **not sandboxed** on purpose (it drives InDesign and scans the file system), so it ships via **Developer ID + notarization**, not the Mac App Store.
-
 ### Command-line alternative (no app)
 
 ```bash

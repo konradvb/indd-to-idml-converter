@@ -100,16 +100,36 @@ Dieses Tool ist **gratis und Open Source**. Wenn es dir Stunden Arbeit oder eine
 
 ## Für Entwickler
 
-Native macOS-**SwiftUI**-App, Workspace + Swift Package Manager. Code und Kommentare auf Englisch (Open-Source-Konvention). Details und Befehle stehen in der **[englischen README](README.md#for-developers)** — inklusive Build und Notarisierung (`notarize.sh`).
+Native macOS-**SwiftUI**-App, Workspace + Swift Package Manager.
 
-Kurz:
-
-```bash
-open INDDConverter.xcworkspace      # in Xcode öffnen
-./notarize.sh                       # signierte, notarisierte Version für die Verteilung bauen
+```
+INDDConverter.xcworkspace          ← in Xcode öffnen
+INDDConverter/                     ← App-Shell (Entry Point, Assets, AppIconGlass.icon)
+INDDConverterPackage/
+  Sources/INDDConverterFeature/
+    ContentView.swift              ← UI
+    Converter.swift                ← Scan + InDesign-Steuerung (AppleScript via osascript)
+    Resources/{de,en}.lproj/       ← lokalisierte Strings
+Config/                            ← xcconfig Build-Einstellungen + Entitlements
+notarize.sh                        ← bauen, signieren, notarisieren
+convert_indd_to_idml.applescript   ← Standalone-Script (ohne App)
+find_indd_files.sh                 ← Hilfsskript zum Erstellen einer Dateiliste
 ```
 
-Die App ist **bewusst nicht in der Sandbox** (sie steuert InDesign und durchsucht das Dateisystem) und wird daher über **Developer ID + Notarisierung** verteilt, nicht über den Mac App Store.
+### Build
+
+```bash
+open INDDConverter.xcworkspace
+# oder
+xcodebuild -workspace INDDConverter.xcworkspace -scheme INDDConverter -configuration Release build
+```
+
+### Kommandozeilen-Alternative (ohne App)
+
+```bash
+./find_indd_files.sh ~/Documents /tmp/indd_files.txt   # 1. .indd-Pfade sammeln
+osascript convert_indd_to_idml.applescript             # 2. konvertieren (Pfade oben im Script anpassen)
+```
 
 ---
 
