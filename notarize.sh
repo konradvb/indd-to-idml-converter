@@ -21,7 +21,7 @@ set -euo pipefail
 SCHEME="INDDConverter"
 WORKSPACE="INDDConverter.xcworkspace"
 CONFIG="Release"
-TEAM_ID="YPTLHJD4XZ"                 # Apple Team ID (from your account)
+TEAM_ID="7A5RH5V7ZB"                 # Apple Team ID (from your account)
 SIGN_IDENTITY="Developer ID Application"   # Prefix is enough; xcodebuild finds the matching certificate
 NOTARY_PROFILE="INDD-Notary"         # Name of the Keychain profile (see store-credentials above)
 
@@ -51,9 +51,9 @@ fi
 echo "✓ Certificate and notary profile found."
 
 # ---------------------------------------------------------------------------
-# 1) Clean build + sign with Developer ID (Hardened Runtime enabled)
+# 1) Clean build (no signing yet — sign after stripping xattrs)
 # ---------------------------------------------------------------------------
-echo "▸ Building & signing ($CONFIG, Hardened Runtime) …"
+echo "▸ Building ($CONFIG) …"
 rm -rf "$BUILD_DIR"
 xcodebuild \
   -workspace "$WORKSPACE" \
@@ -62,15 +62,35 @@ xcodebuild \
   -destination 'platform=macOS' \
   -derivedDataPath "$BUILD_DIR" \
   CODE_SIGN_STYLE=Manual \
-  CODE_SIGN_IDENTITY="$SIGN_IDENTITY" \
+  CODE_SIGN_IDENTITY="" \
+  CODE_SIGNING_REQUIRED=NO \
+  CODE_SIGNING_ALLOWED=NO \
   DEVELOPMENT_TEAM="$TEAM_ID" \
-  ENABLE_HARDENED_RUNTIME=YES \
-  OTHER_CODE_SIGN_FLAGS="--timestamp" \
   build
 
 APP_PATH="$(find "$BUILD_DIR/Build/Products/$CONFIG" -name "$APP_NAME" -type d | head -1)"
 if [ -z "$APP_PATH" ]; then echo "✗ Built app not found"; exit 1; fi
 echo "✓ Built: $APP_PATH"
+
+# Copy without extended attributes — RegisterWithLaunchServices (part of the build)
+# adds com.apple.FinderInfo to the .app dir, which codesign rejects.
+# ditto --noextattr gives us a pristine copy.
+echo "▸ Creating clean copy (stripping xattrs) …"
+CLEAN_DIR="$(mktemp -d)"
+CLEAN_APP="$CLEAN_DIR/$APP_NAME"
+ditto --noextattr --norsrc "$APP_PATH" "$CLEAN_APP"
+APP_PATH="$CLEAN_APP"
+
+# Sign with Developer ID + Hardened Runtime
+echo "▸ Signing with Developer ID (Hardened Runtime) …"
+ENTITLEMENTS="$(pwd)/Config/INDDConverter.entitlements"
+codesign \
+  --force --deep \
+  --sign "$SIGN_IDENTITY" \
+  --timestamp \
+  --options runtime \
+  --entitlements "$ENTITLEMENTS" \
+  "$APP_PATH"
 
 # Verify signature
 codesign --verify --deep --strict --verbose=2 "$APP_PATH"

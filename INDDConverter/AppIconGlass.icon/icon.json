@@ -5,6 +5,19 @@
   "groups" : [
     {
       "layers" : [
+
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.5
+      }
+    },
+    {
+      "layers" : [
         {
           "blend-mode-specializations" : [
             {
@@ -13,46 +26,59 @@
             {
               "appearance" : "dark",
               "value" : "normal"
+            },
+            {
+              "appearance" : "tinted",
+              "value" : "normal"
             }
           ],
-          "fill" : "automatic",
-          "glass" : true,
-          "hidden" : false,
-          "image-name" : "indd-convert 2.png",
-          "name" : "indd-convert 2",
-          "position-specializations" : [
+          "fill-specializations" : [
             {
-              "value" : {
-                "scale" : 0.72,
-                "translation-in-points" : [
-                  0,
-                  0
-                ]
-              }
+              "value" : "automatic"
             },
             {
-              "appearance" : "light",
-              "value" : {
-                "scale" : 0.72,
-                "translation-in-points" : [
-                  0,
-                  0
-                ]
-              }
-            },
+              "appearance" : "dark",
+              "value" : "automatic"
+            }
+          ],
+          "glass-specializations" : [
             {
               "idiom" : "square",
-              "value" : {
-                "scale" : 0.72,
-                "translation-in-points" : [
-                  0,
-                  0
-                ]
-              }
+              "value" : false
+            },
+            {
+              "appearance" : "dark",
+              "idiom" : "square",
+              "value" : true
+            },
+            {
+              "appearance" : "tinted",
+              "idiom" : "square",
+              "value" : false
             }
-          ]
+          ],
+          "hidden" : false,
+          "image-name" : "indd-convert2.png",
+          "name" : "indd-convert2",
+          "opacity-specializations" : [
+            {
+              "value" : 1
+            },
+            {
+              "appearance" : "dark",
+              "value" : 0.85
+            }
+          ],
+          "position" : {
+            "scale" : 0.82,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
         }
       ],
+      "name" : "Group",
       "shadow" : {
         "kind" : "neutral",
         "opacity" : 0.5
