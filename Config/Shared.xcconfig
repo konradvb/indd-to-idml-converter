@@ -9,8 +9,8 @@
 PRODUCT_NAME = INDDConverter
 PRODUCT_DISPLAY_NAME = INDD IDML Converter
 PRODUCT_BUNDLE_IDENTIFIER = de.konradvb.indd-idml-converter
-MARKETING_VERSION = 1.0
-CURRENT_PROJECT_VERSION = 1
+MARKETING_VERSION = 1.1
+CURRENT_PROJECT_VERSION = 2
 
 // ==========================================
 // Platform Configuration
